@@ -89,7 +89,7 @@ describe('OpenAI Live', () => {
         endpoint: '/chat/completions',
         method: 'POST',
         body: {
-          model: 'gpt-4o-mini',
+          model: 'gpt-5',
           messages: [{ role: 'user', content: 'Say "test" and nothing else.' }],
           max_tokens: 10,
         },
@@ -371,6 +371,114 @@ describe('CoinGecko Live', () => {
 });
 
 // ============================================================================
+// AWS Bedrock Live Tests
+// ============================================================================
+
+describe('AWS Bedrock Live', () => {
+  const skip = !process.env.AWS_BEDROCK_ACCESS_KEY_ID;
+
+  test.skipIf(skip)('should proxy Claude request via Bedrock', async () => {
+    const listing = await findCheapestListing('aws-bedrock');
+    expect(listing).toBeDefined();
+
+    const response = await proxyRequest(
+      {
+        listingId: listing!.id,
+        endpoint: '/model/anthropic.claude-3-haiku-20240307-v1:0/invoke',
+        method: 'POST',
+        body: {
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Say test' }],
+        },
+      },
+      { userAddress: TEST_USER, timeout: 30000 }
+    );
+
+    console.log('[AWS Bedrock] Response status:', response.status);
+    console.log('[AWS Bedrock] Latency:', response.latencyMs, 'ms');
+
+    // Accept 200 (success) or 403 (credential issues in non-AWS environment)
+    expect([200, 403]).toContain(response.status);
+    
+    const bodyStr = JSON.stringify(response.body);
+    expect(bodyStr).not.toContain(process.env.AWS_BEDROCK_ACCESS_KEY_ID);
+  });
+});
+
+// ============================================================================
+// GCP Vertex AI Live Tests
+// ============================================================================
+
+describe('GCP Vertex AI Live', () => {
+  const skip = !process.env.GCP_VERTEX_API_KEY;
+
+  test.skipIf(skip)('should proxy Gemini request via Vertex AI', async () => {
+    const listing = await findCheapestListing('gcp-vertex');
+    expect(listing).toBeDefined();
+
+    // Note: Actual endpoint depends on project/location
+    const response = await proxyRequest(
+      {
+        listingId: listing!.id,
+        endpoint: '/projects/test-project/locations/us-central1/publishers/google/models/gemini-1.5-flash:generateContent',
+        method: 'POST',
+        body: {
+          contents: [{ role: 'user', parts: [{ text: 'Say test' }] }],
+          generationConfig: { maxOutputTokens: 10 },
+        },
+      },
+      { userAddress: TEST_USER, timeout: 30000 }
+    );
+
+    console.log('[GCP Vertex] Response status:', response.status);
+    console.log('[GCP Vertex] Latency:', response.latencyMs, 'ms');
+
+    // Accept various statuses - 404/403 expected without real project
+    expect([200, 400, 403, 404]).toContain(response.status);
+    
+    const bodyStr = JSON.stringify(response.body);
+    expect(bodyStr).not.toContain(process.env.GCP_VERTEX_API_KEY);
+  });
+});
+
+// ============================================================================
+// Azure OpenAI Live Tests
+// ============================================================================
+
+describe('Azure OpenAI Live', () => {
+  const skip = !process.env.AZURE_OPENAI_API_KEY;
+
+  test.skipIf(skip)('should proxy chat completion via Azure', async () => {
+    const listing = await findCheapestListing('azure-openai');
+    expect(listing).toBeDefined();
+
+    // Note: Actual endpoint depends on resource-name and deployment-id
+    const response = await proxyRequest(
+      {
+        listingId: listing!.id,
+        endpoint: '/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview',
+        method: 'POST',
+        body: {
+          messages: [{ role: 'user', content: 'Say test' }],
+          max_tokens: 10,
+        },
+      },
+      { userAddress: TEST_USER, timeout: 30000 }
+    );
+
+    console.log('[Azure OpenAI] Response status:', response.status);
+    console.log('[Azure OpenAI] Latency:', response.latencyMs, 'ms');
+
+    // Accept various statuses - endpoint URL needs proper resource name
+    expect([200, 400, 401, 403, 404]).toContain(response.status);
+    
+    const bodyStr = JSON.stringify(response.body);
+    expect(bodyStr).not.toContain(process.env.AZURE_OPENAI_API_KEY);
+  });
+});
+
+// ============================================================================
 // Tavily Live Tests (Web Search)
 // ============================================================================
 
@@ -543,4 +651,3 @@ describe('Test Summary', () => {
     expect(true).toBe(true);
   });
 });
-

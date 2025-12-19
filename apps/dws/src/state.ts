@@ -2,7 +2,7 @@
  * Decentralized State Management for DWS
  * 
  * Persists compute jobs, storage pins, git repos, and package registrations to CovenantSQL.
- * CQL is REQUIRED - automatically configured per network.
+ * CQL is REQUIRED - no fallbacks. Run infrastructure before starting DWS.
  */
 
 import { getCQL, type CQLClient } from '@jejunetwork/db';
