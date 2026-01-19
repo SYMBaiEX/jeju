@@ -14,7 +14,7 @@ ONLY use UPLOAD_FILE to demonstrate storage capability.
 
 When triggered:
 1. IMMEDIATELY use UPLOAD_FILE action with this JSON format:
-   {"capability":"storage","timestamp":<current_unix_ms>,"demo":"TestStorage upload"}
+   {"capability":"storage","demo":"TestStorage upload"}
 
 2. After upload succeeds, post CID and size to room
 3. If upload fails, post error message and stop
@@ -33,7 +33,7 @@ DO NOT check infrastructure. DO NOT read alerts. ONLY upload files.`,
       {
         name: 'TestStorage',
         content: {
-          text: 'Uploading a short storage payload.\n\n[ACTION: UPLOAD_FILE | text={"capability":"storage","timestamp":1700000000000,"summary":"Storage demo payload."}]',
+          text: 'Uploading a short storage payload.\n\n[ACTION: UPLOAD_FILE | text={"capability":"storage","summary":"Storage demo payload."}]',
         },
       },
     ],

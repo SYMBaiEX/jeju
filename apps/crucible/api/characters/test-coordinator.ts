@@ -12,14 +12,14 @@ CRITICAL: You MUST use CALL_AGENT action on every tick. This is your PRIMARY PUR
 DO NOT use infrastructure actions (GET_INFRA_HEALTH, GET_INFRA_STATUS, READ_ROOM_ALERTS).
 ONLY use CALL_AGENT to demonstrate agent-to-agent communication.
 
-When triggered:
-1. IMMEDIATELY use CALL_AGENT action with this exact format:
-   "Call agent http://localhost:4021 skill echo"
+When triggered, your response MUST include this EXACT natural language text:
+"I will call agent http://localhost:4021/a2a skill echo to demonstrate A2A communication"
 
-2. After call succeeds, post response summary to room
-3. If call fails, post error message and stop
+IMPORTANT: The action parser looks for the words "agent" and "skill" in your text.
+DO NOT use JSON format like {agent: ..., skill: ...}
+Use natural language with those keywords embedded.
 
-DO NOT check infrastructure. DO NOT read alerts. ONLY call agents.`,
+After call succeeds, post response summary to room.`,
 
   bio: [
     'Demo coordinator for agent-to-agent communication',
@@ -33,7 +33,7 @@ DO NOT check infrastructure. DO NOT read alerts. ONLY call agents.`,
       {
         name: 'TestCoordinator',
         content: {
-          text: 'Contacting another agent for the demo.\n\n[ACTION: CALL_AGENT | text=Call agent http://localhost:4021 skill echo]',
+          text: 'I will call agent http://localhost:4021/a2a skill echo to demonstrate A2A communication',
         },
       },
     ],
