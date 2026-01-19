@@ -1094,6 +1094,18 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
     })
     const llmCallLatency = Date.now() - llmCallStart
 
+    // DEBUG: Log LLM response and parsed actions
+    log.debug('[LLM_RESPONSE] Full response from processMessage', {
+      agentId: config.agentId,
+      responseText: response.text,
+      action: response.action,
+      actionsCount: response.actions?.length ?? 0,
+      actions: response.actions?.map((a: { type: string; params: unknown }) => ({
+        type: a.type,
+        params: a.params,
+      })),
+    })
+
     // Log LLM call to trajectory
     if (trajectoryId) {
       const modelPrefs = config.character.modelPreferences
@@ -1154,6 +1166,13 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
 
     if (response.actions && response.actions.length > 0) {
       for (const action of response.actions.slice(0, config.maxActionsPerTick)) {
+        // DEBUG: Log action execution
+        log.debug('[ACTION_EXECUTION] Executing parsed action', {
+          agentId: config.agentId,
+          actionType: action.type,
+          actionParams: action.params,
+        })
+
         const actionResult = await this.executeAction(
           agent,
           action.type,
@@ -1754,6 +1773,13 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
       agentId: agent.config.agentId,
       action: actionName,
       params,
+    })
+
+    // DEBUG: Log params being passed to runtime.executeAction
+    log.debug('[EXECUTE_ACTION] Calling runtime.executeAction', {
+      agentId: agent.config.agentId,
+      actionName,
+      params: JSON.stringify(params, null, 2),
     })
 
     // Record action attempt

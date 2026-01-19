@@ -53,12 +53,6 @@ const blockscoutRpcContractSchema = z.object({
   ABI: z.string().optional(),
 })
 
-const blockscoutRpcResponseSchema = z.object({
-  status: z.string(),
-  message: z.string(),
-  result: z.array(blockscoutRpcContractSchema),
-})
-
 export type BlockscoutContractItem = z.infer<
   typeof blockscoutContractItemSchema
 >
