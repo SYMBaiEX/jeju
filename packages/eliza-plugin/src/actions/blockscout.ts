@@ -45,14 +45,6 @@ const blockscoutContractsResponseSchema = z.object({
   next_page_params: blockscoutNextPageParamsSchema,
 })
 
-const blockscoutRpcContractSchema = z.object({
-  Address: z.string(),
-  ContractName: z.string().nullable(),
-  CompilerVersion: z.string().optional(),
-  OptimizationUsed: z.string().optional(),
-  ABI: z.string().optional(),
-})
-
 export type BlockscoutContractItem = z.infer<
   typeof blockscoutContractItemSchema
 >
