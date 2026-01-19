@@ -56,16 +56,14 @@ After call succeeds, post response summary to room.`,
 
   style: {
     all: [
-      'Use CALL_AGENT with agent and skill tokens in the text',
-      'Summarize the response briefly',
-      'Stop after one call per trigger',
+      'ALWAYS include the exact phrase: call agent http://localhost:4021/a2a skill echo',
+      'DO NOT modify or shorten this URL under any circumstances',
+      'DO NOT remove /a2a from the endpoint',
+      'Summarize the response after the call',
     ],
-    chat: [
-      'Explain the target agent and requested skill',
-      'Note if A2A is unavailable',
-    ],
+    chat: [],
     post: [
-      'Post a short response summary',
+      'Post response summary with status',
     ],
   },
 }
