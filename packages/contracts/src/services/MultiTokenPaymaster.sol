@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import {BasePaymaster} from "account-abstraction/core/BasePaymaster.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
@@ -134,7 +134,7 @@ contract MultiTokenPaymaster is BasePaymaster {
         address _priceOracle,
         address _revenueWallet,
         address _owner
-    ) BasePaymaster(_entryPoint, _owner == address(0) ? msg.sender : _owner) {
+    ) BasePaymaster(_entryPoint) {
         require(_usdc != address(0), "Invalid USDC");
         require(_jeju != address(0), "Invalid JEJU");
         require(_creditManager != address(0), "Invalid credit manager");
@@ -148,11 +148,16 @@ contract MultiTokenPaymaster is BasePaymaster {
         serviceRegistry = IServiceRegistry(_serviceRegistry);
         priceOracle = IPriceOracle(_priceOracle);
         revenueWallet = _revenueWallet;
+
+        // Transfer ownership if custom owner provided
+        if (_owner != address(0) && _owner != msg.sender) {
+            _transferOwnership(_owner);
+        }
     }
 
     // ============ Core Paymaster Logic ============
 
-    function _validatePaymasterUserOp(PackedUserOperation calldata userOp, bytes32, uint256 maxCost)
+    function _validatePaymasterUserOp(UserOperation calldata userOp, bytes32, uint256 maxCost)
         internal
         view
         override
@@ -214,7 +219,7 @@ contract MultiTokenPaymaster is BasePaymaster {
         return (context, 0);
     }
 
-    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost, uint256) internal override {
+    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost) internal override {
         (address user, string memory serviceName, address token,, uint256 overpayment, bool useCredit) =
             abi.decode(context, (address, string, address, uint256, uint256, bool));
 
@@ -336,12 +341,12 @@ contract MultiTokenPaymaster is BasePaymaster {
     }
 
     function depositToEntryPoint() external payable onlyOwner {
-        entryPoint().depositTo{value: msg.value}(address(this));
+        entryPoint.depositTo{value: msg.value}(address(this));
         emit EntryPointFunded(msg.value);
     }
 
     function withdrawFromEntryPoint(address payable to, uint256 amount) external onlyOwner {
-        entryPoint().withdrawTo(to, amount);
+        entryPoint.withdrawTo(to, amount);
     }
 
     function pause() external onlyOwner {

@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Crown,
   Heart,
+  Info,
   Loader2,
   MessageSquare,
   Plus,
@@ -289,6 +290,41 @@ function AgentForm({
             />
           </div>
 
+          {/* Weight (for non-Director) */}
+          {!isDirector && (
+            <div>
+              <label
+                htmlFor={`weight-${agent.persona.name}`}
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Voting Weight ({agent.weight}%)
+              </label>
+              <input
+                id={`weight-${agent.persona.name}`}
+                type="range"
+                min="5"
+                max="50"
+                step="5"
+                value={agent.weight}
+                onChange={(e) =>
+                  onChange({
+                    ...agent,
+                    weight: Number.parseInt(e.target.value, 10),
+                  })
+                }
+                className="w-full accent-[var(--color-primary)]"
+              />
+              <div
+                className="flex justify-between text-xs"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                <span>5%</span>
+                <span>50%</span>
+              </div>
+            </div>
+          )}
+
           {/* Bio */}
           <div>
             <label
@@ -498,41 +534,6 @@ function AgentForm({
               </button>
             </div>
           </div>
-
-          {/* Weight (for non-Director) */}
-          {!isDirector && (
-            <div>
-              <label
-                htmlFor={`weight-${agent.persona.name}`}
-                className="block text-sm font-medium mb-2"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Voting Weight ({agent.weight}%)
-              </label>
-              <input
-                id={`weight-${agent.persona.name}`}
-                type="range"
-                min="5"
-                max="50"
-                step="5"
-                value={agent.weight}
-                onChange={(e) =>
-                  onChange({
-                    ...agent,
-                    weight: Number.parseInt(e.target.value, 10),
-                  })
-                }
-                className="w-full accent-[var(--color-primary)]"
-              />
-              <div
-                className="flex justify-between text-xs"
-                style={{ color: 'var(--text-tertiary)' }}
-              >
-                <span>5%</span>
-                <span>50%</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -709,6 +710,33 @@ export default function CreateDAOPage() {
         return false
     }
   }, [step, name, displayName, director, board, totalBoardWeight])
+
+  const boardValidationIssues = useMemo(() => {
+    if (step !== 'board') return []
+    const issues: string[] = []
+
+    const membersWithoutNames = board
+      .map((b, index) => ({
+        index: index + 1,
+        role: BOARD_ROLE_PRESETS[b.role].name,
+        hasValidName: b.persona.name.trim().length >= 2,
+      }))
+      .filter((m) => !m.hasValidName)
+
+    if (membersWithoutNames.length > 0) {
+      for (const member of membersWithoutNames) {
+        issues.push(`${member.role} (Member ${member.index}) needs a name`)
+      }
+    }
+
+    if (totalBoardWeight !== 100) {
+      issues.push(
+        `Total voting weight must equal 100% (currently ${totalBoardWeight}%)`,
+      )
+    }
+
+    return issues
+  }, [step, board, totalBoardWeight])
 
   return (
     <div
@@ -953,11 +981,40 @@ export default function CreateDAOPage() {
         {step === 'director' && (
           <div className="space-y-6 animate-in">
             <h2
-              className="text-2xl font-bold mb-6"
+              className="text-2xl font-bold"
               style={{ color: 'var(--text-primary)' }}
             >
               Director configuration
             </h2>
+
+            <div
+              className="flex gap-3 p-4 rounded-xl"
+              style={{
+                backgroundColor: 'var(--surface)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <Info
+                className="w-5 h-5 flex-shrink-0 mt-0.5"
+                style={{ color: 'var(--text-tertiary)' }}
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  Configure your Director agent
+                </p>
+                <p
+                  className="text-sm"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Set the agent's name, AI model, and decision style. The
+                  Director is the final decision maker for your DAO.
+                </p>
+              </div>
+            </div>
 
             <AgentForm agent={director} onChange={setDirector} isDirector />
           </div>
@@ -966,34 +1023,44 @@ export default function CreateDAOPage() {
         {/* Step: Board */}
         {step === 'board' && (
           <div className="space-y-6 animate-in">
-            <div className="flex items-center justify-between mb-6">
-              <h2
-                className="text-2xl font-bold"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Board members
-              </h2>
+            <h2
+              className="text-2xl font-bold"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              Board members
+            </h2>
+
+            {boardValidationIssues.length > 0 && (
               <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium"
+                className="flex gap-3 p-4 rounded-xl"
                 style={{
-                  backgroundColor:
-                    totalBoardWeight === 100
-                      ? 'rgba(16, 185, 129, 0.12)'
-                      : 'rgba(239, 68, 68, 0.12)',
-                  color:
-                    totalBoardWeight === 100
-                      ? 'var(--color-success)'
-                      : 'var(--color-error)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
                 }}
               >
-                Total Weight: {totalBoardWeight}%
-                {totalBoardWeight !== 100 && (
-                  <span className="text-xs">
-                    ({totalBoardWeight < 100 ? 'need more' : 'too high'})
-                  </span>
-                )}
+                <AlertCircle
+                  className="w-5 h-5 flex-shrink-0 mt-0.5"
+                  style={{ color: 'var(--color-error)' }}
+                  aria-hidden="true"
+                />
+                <div className="space-y-1">
+                  <p
+                    className="text-sm font-medium"
+                    style={{ color: 'var(--color-error)' }}
+                  >
+                    Required to continue:
+                  </p>
+                  <ul
+                    className="text-sm space-y-0.5"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    {boardValidationIssues.map((issue) => (
+                      <li key={issue}>• {issue}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-4">
               {board.map((agent, index) => (

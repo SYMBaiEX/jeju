@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {BasePaymaster} from "account-abstraction/core/BasePaymaster.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
@@ -55,7 +55,7 @@ contract LiquidityPaymaster is BasePaymaster {
         address _oracle,
         uint256 _feeMargin,
         address _owner
-    ) BasePaymaster(_entryPoint, _owner == address(0) ? msg.sender : _owner) {
+    ) BasePaymaster(_entryPoint) {
         require(_token != address(0), "Invalid token");
         require(_vault != address(0), "Invalid vault");
         require(_oracle != address(0), "Invalid oracle");
@@ -65,6 +65,11 @@ contract LiquidityPaymaster is BasePaymaster {
         vault = _vault;
         oracle = IPriceOracle(_oracle);
         feeMargin = _feeMargin;
+
+        // Transfer ownership if custom owner provided
+        if (_owner != address(0) && _owner != msg.sender) {
+            _transferOwnership(_owner);
+        }
     }
 
     function setFeeMargin(uint256 _feeMargin) external onlyOwner {
@@ -127,7 +132,7 @@ contract LiquidityPaymaster is BasePaymaster {
         return tokenAmount;
     }
 
-    function _validatePaymasterUserOp(PackedUserOperation calldata userOp, bytes32, uint256 maxCost)
+    function _validatePaymasterUserOp(UserOperation calldata userOp, bytes32, uint256 maxCost)
         internal
         view
         override
@@ -146,7 +151,7 @@ contract LiquidityPaymaster is BasePaymaster {
         validationData = 0;
     }
 
-    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost, uint256) internal override {
+    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost) internal override {
         (address sender,, uint256 maxTokenAmount) = abi.decode(context, (address, uint256, uint256));
 
         uint256 actualTokenCost = getTokenAmountForEth(actualGasCost);
