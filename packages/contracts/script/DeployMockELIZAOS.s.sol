@@ -83,9 +83,11 @@ contract FundAccountsWithELIZAOS is Script {
         for (uint256 i = 0; i < accounts.length; i++) {
             if (token.balanceOf(accounts[i]) < amountPerAccount) {
                 token.transfer(accounts[i], amountPerAccount);
-                console.log("Funded:", accounts[i], "->", amountPerAccount / 1e18, "ELIZAOS");
+                console.log("Funded account:");
+                console.log(accounts[i]);
             } else {
-                console.log("Already funded:", accounts[i]);
+                console.log("Already funded:");
+                console.log(accounts[i]);
             }
         }
 
