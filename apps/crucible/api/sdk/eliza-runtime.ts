@@ -16,6 +16,12 @@ import {
   getSharedDWSClient,
 } from '../client/dws'
 import { createLogger, type Logger } from './logger'
+import {
+  createMemoryPersistence,
+  type MemoryPersistenceService,
+  type CommitResult,
+  createWalletSigner,
+} from './memory-persistence'
 
 // Store the original Eliza action handlers
 type ElizaActionHandler = Action['handler']
@@ -44,6 +50,16 @@ export interface RuntimeConfig {
   privateKey?: Hex
   /** Network to connect to */
   network?: NetworkType
+  /** On-chain agent ID (bigint) for memory persistence */
+  onChainAgentId?: bigint
+  /** Character CID on IPFS */
+  characterCid?: string
+  /** Current state CID on IPFS */
+  stateCid?: string
+  /** Enable memory persistence to L2/IPFS (default: true if configured) */
+  enableMemoryPersistence?: boolean
+  /** Snapshot interval in ms (default: 60000) */
+  memorySnapshotIntervalMs?: number
 }
 
 export interface RuntimeMessage {
@@ -137,6 +153,9 @@ export class CrucibleAgentRuntime {
   // Jeju service instance
   private jejuService: StandaloneJejuService | null = null
 
+  // Memory persistence service for L2/IPFS commits
+  private memoryPersistence: MemoryPersistenceService | null = null
+
   constructor(config: RuntimeConfig) {
     this.config = config
     this.log = config.logger ?? createLogger(`Runtime:${config.agentId}`)
@@ -215,10 +234,71 @@ export class CrucibleAgentRuntime {
       await this.loadJejuPlugin()
     }
 
+    // Initialize memory persistence if configured
+    if (
+      this.config.enableMemoryPersistence !== false &&
+      this.config.onChainAgentId &&
+      this.config.characterCid &&
+      this.config.stateCid &&
+      this.jejuService
+    ) {
+      try {
+        const { loadDeployedContracts } = await import('@jejunetwork/config')
+        const network =
+          this.config.network ?? (getCurrentNetwork() as NetworkType)
+        const contracts = loadDeployedContracts(network)
+        const { createStorage } = await import('./storage')
+        const { createKMSSigner } = await import('./kms-signer')
+
+        if (contracts.identityRegistry) {
+          // Create storage service
+          const storage = createStorage({
+            apiUrl: getDWSEndpoint(),
+            ipfsGateway: getDWSEndpoint().replace('/api', '/ipfs'),
+          })
+
+          // Create signer from Jeju service wallet client
+          const signer = createWalletSigner(
+            this.jejuService.sdk.walletClient,
+            this.jejuService.sdk.publicClient,
+          )
+
+          this.memoryPersistence = createMemoryPersistence({
+            agentId: this.config.onChainAgentId,
+            characterCid: this.config.characterCid,
+            stateCid: this.config.stateCid,
+            identityRegistry: contracts.identityRegistry as `0x${string}`,
+            storage,
+            publicClient: this.jejuService.sdk.publicClient,
+            signer,
+            snapshotIntervalMs: this.config.memorySnapshotIntervalMs ?? 60000,
+            enablePeriodicSnapshots: true,
+            enableEventCommits: true,
+            logger: this.log,
+          })
+
+          await this.memoryPersistence.start()
+          this.log.info('Memory persistence started', {
+            agentId: this.config.onChainAgentId.toString(),
+            snapshotInterval: this.config.memorySnapshotIntervalMs ?? 60000,
+          })
+        } else {
+          this.log.warn(
+            'IdentityRegistry not deployed - memory persistence disabled',
+          )
+        }
+      } catch (err) {
+        this.log.warn('Failed to initialize memory persistence', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
     this.log.info('Agent runtime initialized', {
       agentId: this.config.agentId,
       characterName: this.config.character.name,
       actions: jejuActions.length,
+      memoryPersistence: this.memoryPersistence !== null,
     })
 
     this.initialized = true
@@ -437,6 +517,16 @@ export class CrucibleAgentRuntime {
       textLength: userText.length,
     })
 
+    // Record user message for persistence
+    if (this.memoryPersistence) {
+      this.memoryPersistence.recordMessage({
+        roomId: message.roomId,
+        userId: message.userId,
+        content: userText,
+        role: 'user',
+      })
+    }
+
     // Determine model based on network and character preferences
     const network = getCurrentNetwork()
     const modelPrefs = this.config.character.modelPreferences
@@ -474,6 +564,21 @@ export class CrucibleAgentRuntime {
         ? `${cleanText}\n\n${actionResultText}`
         : cleanText
 
+      // Record response and trigger event-based commit for action
+      if (this.memoryPersistence) {
+        this.memoryPersistence.recordMessage({
+          roomId: message.roomId,
+          userId: this.config.agentId,
+          content: combinedText,
+          role: 'assistant',
+          action,
+        })
+        // Trigger immediate commit on action execution
+        this.memoryPersistence.onActionExecuted(action, execResult.success).catch(err => {
+          this.log.warn('Failed to commit after action', { error: String(err) })
+        })
+      }
+
       return {
         text: combinedText,
         action,
@@ -491,6 +596,17 @@ export class CrucibleAgentRuntime {
           },
         ],
       }
+    }
+
+    // Record response message for persistence (no action case)
+    if (this.memoryPersistence) {
+      this.memoryPersistence.recordMessage({
+        roomId: message.roomId,
+        userId: this.config.agentId,
+        content: cleanText,
+        role: 'assistant',
+        action,
+      })
     }
 
     return {
@@ -860,6 +976,66 @@ export class CrucibleAgentRuntime {
   getExecutableActions(): string[] {
     return jejuActions.filter((a) => a.hasHandler).map((a) => a.name)
   }
+
+  // ============================================
+  // Memory Persistence Methods
+  // ============================================
+
+  /**
+   * Get memory persistence stats
+   */
+  getMemoryPersistenceStats(): {
+    enabled: boolean
+    pendingMessages: number
+    totalCommits: number
+    totalMessagesCommitted: number
+    lastCommitTime: number
+    currentStateCid: string | null
+  } | null {
+    if (!this.memoryPersistence) {
+      return { enabled: false, pendingMessages: 0, totalCommits: 0, totalMessagesCommitted: 0, lastCommitTime: 0, currentStateCid: null }
+    }
+    const stats = this.memoryPersistence.getStats()
+    return {
+      enabled: true,
+      ...stats,
+    }
+  }
+
+  /**
+   * Manually trigger a memory commit
+   */
+  async commitMemory(): Promise<CommitResult | null> {
+    if (!this.memoryPersistence) {
+      return null
+    }
+    return this.memoryPersistence.commit()
+  }
+
+  /**
+   * Notify session end (triggers commit)
+   */
+  async onSessionEnd(roomId: string): Promise<CommitResult | null> {
+    if (!this.memoryPersistence) {
+      return null
+    }
+    return this.memoryPersistence.onSessionEnd(roomId)
+  }
+
+  /**
+   * Shutdown the runtime (commits pending memories)
+   */
+  async shutdown(): Promise<CommitResult | null> {
+    let result: CommitResult | null = null
+    if (this.memoryPersistence) {
+      result = await this.memoryPersistence.stop()
+      this.log.info('Memory persistence stopped', {
+        committed: result?.messagesCommitted ?? 0,
+      })
+    }
+    this.initialized = false
+    return result
+  }
 }
 
 /**
@@ -901,8 +1077,33 @@ export class CrucibleRuntimeManager {
   }
 
   async shutdown(): Promise<void> {
+    // Shutdown all runtimes and commit pending memories
+    const shutdownPromises = Array.from(this.runtimes.values()).map(
+      async (runtime) => {
+        try {
+          const result = await runtime.shutdown()
+          return { agentId: runtime.getAgentId(), result }
+        } catch (err) {
+          this.log.error('Failed to shutdown runtime', {
+            agentId: runtime.getAgentId(),
+            error: String(err),
+          })
+          return { agentId: runtime.getAgentId(), result: null }
+        }
+      },
+    )
+
+    const results = await Promise.all(shutdownPromises)
+    const totalCommitted = results.reduce(
+      (sum, r) => sum + (r.result?.messagesCommitted ?? 0),
+      0,
+    )
+
     this.runtimes.clear()
-    this.log.info('All runtimes shut down')
+    this.log.info('All runtimes shut down', {
+      runtimes: results.length,
+      totalMessagesCommitted: totalCommitted,
+    })
   }
 }
 
