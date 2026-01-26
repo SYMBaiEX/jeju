@@ -12,23 +12,38 @@ docker compose up -d l1-geth
 docker compose logs -f l1-geth  # Wait for "HTTP server started"
 ```
 
-### Step 2: Initialize Genesis Configuration
+### Step 2: Initialize Genesis (Phase 1 - L1 Hash)
 
 ```bash
 chmod +x ../scripts/init-genesis.sh
-../scripts/init-genesis.sh http://localhost:8545
+../scripts/init-genesis.sh phase1
 ```
 
-This updates `rollup.json` with the actual L1 genesis hash.
+This updates `rollup.json` with the L1 genesis hash and timestamp.
 
-### Step 3: Start L2 Stack
+### Step 3: Start op-geth
 
 ```bash
-docker compose up -d op-geth op-node op-batcher
+docker compose up -d op-geth
+docker compose logs -f op-geth  # Wait for "HTTP server started"
+```
+
+### Step 4: Initialize Genesis (Phase 2 - L2 Hash)
+
+```bash
+../scripts/init-genesis.sh phase2
+```
+
+This updates `rollup.json` with the L2 genesis hash.
+
+### Step 5: Start op-node and op-batcher
+
+```bash
+docker compose up -d op-node op-batcher
 docker compose logs -f op-node
 ```
 
-### Step 4: Verify L2 is Producing Blocks
+### Step 6: Verify L2 is Producing Blocks
 
 ```bash
 curl -s localhost:9545 -X POST -H 'Content-Type: application/json' \
@@ -108,21 +123,49 @@ docker compose restart op-node
 ```
 
 ### Clean restart (reset all data)
+
+If L2 stops producing blocks or gets stuck, do a clean restart:
+
 ```bash
-docker compose down -v
-docker compose up -d
+# 1. Stop everything
+docker compose down
+
+# 2. Remove L2 data (keeps L1 data for consistent genesis hash)
+docker volume rm docker_l2-data
+
+# 3. Start L1
+docker compose up -d l1-geth
+sleep 10
+
+# 4. Re-run genesis initialization
+../scripts/init-genesis.sh phase1
+
+# 5. Start op-geth
+docker compose up -d op-geth
+sleep 15
+
+# 6. Update L2 hash
+../scripts/init-genesis.sh phase2
+
+# 7. Start op-node
+docker compose up -d op-node op-batcher
 ```
 
 ### Common Issues
 
 #### "L1 genesis block hash does not match"
-The `rollup.json` L1 hash doesn't match the running L1. Re-run `init-genesis.sh`.
+The `rollup.json` L1 hash doesn't match the running L1. Re-run `init-genesis.sh phase1`.
+
+#### "failed to fetch L1 block info and receipts: querying block: not found"
+This is usually a temporary error when L1 re-orgs occur in Geth --dev mode. The sequencer should recover automatically. If it persists:
+1. Check L1 is producing blocks: `curl localhost:8545 ...`
+2. Do a clean restart (see above)
 
 #### "state scheme path vs hash conflict"
-The `--state.scheme=hash` flag is already added to the geth init command. If you see this error, delete the L2 data volume and restart:
+The `--state.scheme=hash` flag is already added to the geth init command. If you see this error:
 ```bash
 docker compose down
-docker volume rm jeju_l2-data
+docker volume rm docker_l2-data
 docker compose up -d
 ```
 
@@ -132,8 +175,14 @@ This deployment uses pre-Ecotone forks (up to Canyon) to avoid requiring a Beaco
 #### op-node "backing off" or not producing blocks
 Ensure these flags are set in op-node command:
 - `--l1.trustrpc` - Trust the L1 RPC (required for Geth --dev mode)
+- `--l1.rpckind=debug_geth` - Use Geth-compatible RPC methods
 - `--sequencer.l1-confs=0` - Don't wait for L1 confirmations
 - `--verifier.l1-confs=0` - Don't wait for L1 confirmations
+
+#### L2 hash mismatch after restart
+If you restart the stack, the L2 genesis hash changes. You must:
+1. Delete L2 data: `docker volume rm docker_l2-data`
+2. Re-run both phases of `init-genesis.sh`
 
 ## Version Compatibility Notes
 
@@ -146,8 +195,38 @@ This deployment uses specific versions tested to work together:
 | op-batcher | latest | ARM64 support |
 | Geth L1 | v1.14.12 | --dev mode with 2s block time |
 
+### Key op-node Flags for Geth --dev
+
+```yaml
+- --l1.trustrpc           # Trust L1 RPC responses
+- --l1.rpckind=debug_geth # Use Geth debug RPC methods
+- --sequencer.l1-confs=0  # No L1 confirmation wait
+- --verifier.l1-confs=0   # No L1 confirmation wait
+```
+
 ### Why not Anvil?
 Anvil has issues with block hash stability that cause op-node to fail verification. Geth in `--dev` mode provides stable, deterministic block hashes.
 
 ### Why no Ecotone/Fjord/Granite?
 These forks require a Beacon API (L1 Beacon node). For simplicity, this deployment runs with forks up to Canyon only.
+
+## Oracle Cloud CLI
+
+To manage instances and create images:
+
+```bash
+# Install OCI CLI
+brew install oci-cli
+
+# Configure
+oci setup config
+
+# List instances
+oci compute instance list --compartment-id <compartment-ocid> --output table
+
+# Create custom image from instance
+oci compute image create \
+  --compartment-id <compartment-ocid> \
+  --instance-id <instance-ocid> \
+  --display-name "jeju-l2-base"
+```
