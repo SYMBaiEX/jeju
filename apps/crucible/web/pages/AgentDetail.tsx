@@ -74,6 +74,11 @@ const CAPABILITY_CONFIG: Record<
     description: "Can create proposals",
   },
   canStake: { icon: "🔒", label: "Stake", description: "Can stake tokens" },
+  canStore: {
+    icon: "📦",
+    label: "Storage",
+    description: "Can upload to IPFS storage",
+  },
   a2a: {
     icon: "🤝",
     label: "A2A",

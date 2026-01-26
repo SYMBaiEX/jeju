@@ -12,6 +12,7 @@ interface Capabilities {
   canVote: boolean
   canPropose: boolean
   canStake: boolean
+  canStore: boolean
   a2a: boolean
   compute: boolean
 }
@@ -51,6 +52,11 @@ const CAPABILITY_CONFIG: Record<
     icon: '🔒',
     label: 'Stake',
     description: 'Stake tokens in protocols',
+  },
+  canStore: {
+    icon: '📦',
+    label: 'Storage',
+    description: 'Upload files to IPFS storage',
   },
   a2a: {
     icon: '🤝',
@@ -102,6 +108,7 @@ export default function CreateAgentPage() {
     canVote: false,
     canPropose: false,
     canStake: false,
+    canStore: false,
     a2a: false,
     compute: false,
   })

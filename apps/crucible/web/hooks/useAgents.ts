@@ -33,6 +33,7 @@ interface Agent {
     canVote?: boolean
     canPropose?: boolean
     canStake?: boolean
+    canStore?: boolean
     a2a?: boolean
     compute?: boolean
   }
@@ -68,6 +69,7 @@ interface RegisterAgentRequest {
     canVote?: boolean
     canPropose?: boolean
     canStake?: boolean
+    canStore?: boolean
     a2a?: boolean
     compute?: boolean
   }

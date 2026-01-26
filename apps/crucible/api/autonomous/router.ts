@@ -56,6 +56,7 @@ const RegisterAgentSchema = t.Object({
       canDelegate: t.Optional(t.Boolean()),
       canStake: t.Optional(t.Boolean()),
       canBridge: t.Optional(t.Boolean()),
+      canStore: t.Optional(t.Boolean()),
       a2a: t.Optional(t.Boolean()),
       compute: t.Optional(t.Boolean()),
       canModerate: t.Optional(t.Boolean()),

@@ -46,6 +46,7 @@ export interface AutonomousCapabilities {
   canDelegate: boolean
   canStake: boolean
   canBridge: boolean
+  canStore?: boolean
   a2a?: boolean
   compute?: boolean
   canModerate?: boolean
@@ -124,6 +125,7 @@ export const DEFAULT_AUTONOMOUS_CONFIG: Omit<
     canDelegate: true,
     canStake: true,
     canBridge: false, // Require explicit opt-in
+    canStore: false, // Require explicit opt-in
     a2a: true, // Enable A2A communication by default
     compute: true, // Enable compute actions by default
   },

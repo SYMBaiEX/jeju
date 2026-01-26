@@ -92,6 +92,7 @@ export const RegisterAgentRequestSchema = z.object({
       canPropose: z.boolean().optional(),
       canVote: z.boolean().optional(),
       canStake: z.boolean().optional(),
+      canStore: z.boolean().optional(),
       a2a: z.boolean().optional(),
       compute: z.boolean().optional(),
     })
@@ -124,6 +125,7 @@ export const AgentStartRequestSchema = z.object({
       canDelegate: z.boolean().optional(),
       canStake: z.boolean().optional(),
       canBridge: z.boolean().optional(),
+      canStore: z.boolean().optional(),
       a2a: z.boolean().optional(),
       compute: z.boolean().optional(),
     })
@@ -194,6 +196,7 @@ export const ToggleAutonomousRequestSchema = z.object({
       canDelegate: z.boolean().optional(),
       canStake: z.boolean().optional(),
       canBridge: z.boolean().optional(),
+      canStore: z.boolean().optional(),
       a2a: z.boolean().optional(),
       compute: z.boolean().optional(),
     })
