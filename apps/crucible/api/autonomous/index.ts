@@ -1,5 +1,6 @@
 import { Cron } from 'croner'
 import { getCurrentNetwork } from '@jejunetwork/config'
+import type { JsonValue } from '@jejunetwork/types'
 import type { Action, EnvironmentState, LLMCall } from '@jejunetwork/training'
 import {
   getStaticTrajectoryStorage,
@@ -1098,12 +1099,12 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
     log.debug('[LLM_RESPONSE] Full response from processMessage', {
       agentId: config.agentId,
       responseText: response.text,
-      action: response.action,
+      action: response.action ?? null,
       actionsCount: response.actions?.length ?? 0,
-      actions: response.actions?.map((a: { type: string; params: unknown }) => ({
+      actions: (response.actions?.map((a: { type: string; params: unknown }) => ({
         type: a.type,
-        params: a.params,
-      })),
+        params: JSON.stringify(a.params),
+      })) ?? null) as JsonValue,
     })
 
     // Log LLM call to trajectory
@@ -1437,13 +1438,13 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
 
     // DEBUG: Log capabilities to verify what's being passed in
     log.debug('[ACTION_FILTER] Capabilities passed to getAvailableActions', {
-      canTrade: capabilities.canTrade,
-      canStore: capabilities.canStore,
-      compute: capabilities.compute,
-      a2a: capabilities.a2a,
-      canVote: capabilities.canVote,
-      canPropose: capabilities.canPropose,
-      canChat: capabilities.canChat,
+      canTrade: capabilities.canTrade ?? false,
+      canStore: capabilities.canStore ?? false,
+      compute: capabilities.compute ?? false,
+      a2a: capabilities.a2a ?? false,
+      canVote: capabilities.canVote ?? false,
+      canPropose: capabilities.canPropose ?? false,
+      canChat: capabilities.canChat ?? false,
     })
 
     if (capabilities.canTrade) {
@@ -1748,7 +1749,7 @@ Output ONLY the formatted alert message. Do not include any action syntax or ins
       log.info('POLL_BLOCKSCOUT action called', {
         agentId: agent.config.agentId,
         hasChainId: !!agent.config.chainId,
-        chainId: agent.config.chainId,
+        chainId: agent.config.chainId ?? null,
       })
       if (agent.config.chainId) {
         const chain = getChainConfig(agent.config.chainId)

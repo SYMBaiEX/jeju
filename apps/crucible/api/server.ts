@@ -1229,7 +1229,7 @@ app.get("/api/v1/agents/:agentId", async ({ params, set }) => {
     const validAgent = expect(agent, `Agent not found: ${parsedParams.agentId}`);
 
     const db = getDatabase();
-    const dbAgent = await db.getAgent(parsedParams.agentId);
+    const dbAgent = await db.getAgent(String(parsedParams.agentId));
     const autonomousConfig = JSON.parse(dbAgent?.autonomous_config ?? "{}");
     const runtimeState = JSON.parse(dbAgent?.runtime_state ?? "{}");
 
@@ -1250,7 +1250,7 @@ app.get("/api/v1/agents/:agentId", async ({ params, set }) => {
     const autonomousStatus = autonomousRunner?.getStatus();
     const autonomousAgent = autonomousStatus?.agents.find(
       (a) =>
-        a.id === parsedParams.agentId ||
+        a.id === String(parsedParams.agentId) ||
         a.id === `onchain-agent-${parsedParams.agentId}`,
     );
     const isAutonomous = dbAgent ? dbAgent.enabled === 1 : !!autonomousAgent;
@@ -1365,7 +1365,7 @@ app.get("/api/v1/agents/:agentId/character", async ({ params, set }) => {
   }
 });
 
-app.get("/api/v1/agents/:agentId/state", async ({ params, set }) => {
+app.get("/api/v1/agents/:agentId/state", async ({ params, set: _set }) => {
   const agentIdParam = params.agentId;
   const isNumeric = /^\d+$/.test(agentIdParam);
 
@@ -1491,7 +1491,7 @@ app.post(
       return { error: `Agent not found: ${parsedParams.agentId}` };
     }
 
-    const autonomousAgentId = parsedParams.agentId;
+    const autonomousAgentId = String(parsedParams.agentId);
 
     if (parsedBody.enabled) {
       // Load character from IPFS

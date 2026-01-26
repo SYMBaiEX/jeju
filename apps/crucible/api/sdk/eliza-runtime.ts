@@ -1305,7 +1305,7 @@ export class CrucibleAgentRuntime {
 
     return {
       success: true,
-      result: results,
+      result: results as JsonValue,
     }
   }
 
