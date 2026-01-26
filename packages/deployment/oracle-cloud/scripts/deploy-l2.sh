@@ -5,12 +5,14 @@
 # This script deploys a complete OP Stack L2:
 # 1. L1: Geth in --dev mode (NOT Anvil - avoids block hash issues)
 # 2. L1 Contracts: via op-deployer
-# 3. L2: op-geth v1.101408.0 + op-node v1.10.1 (compatible versions)
+# 3. L2: op-geth (latest) + op-node v1.11.0 (ARM64 compatible versions)
 #
 # Prerequisites:
 # - Docker installed
 # - At least 8GB RAM
 # - Ports 8545, 8546, 8551, 9545 available
+#
+# ARM64 (Oracle Cloud Ampere) compatible
 
 set -e
 
@@ -29,7 +31,8 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Configuration
-L1_CHAIN_ID=3151908
+# NOTE: Geth --dev mode uses chain ID 1337 by default
+L1_CHAIN_ID=1337
 L2_CHAIN_ID=2151908
 L1_RPC_PORT=8545
 L2_RPC_PORT=9545
@@ -65,6 +68,7 @@ start_l1() {
 
     # Use ethereum/client-go with --dev mode
     # This creates a single-node chain with instant mining
+    # NOTE: --dev mode uses chain ID 1337 by default
     docker run -d \
         --name jeju-l1-geth \
         --network host \
@@ -89,7 +93,6 @@ start_l1() {
         --authrpc.port=8551 \
         --authrpc.vhosts='*' \
         --authrpc.jwtsecret=/jwt/jwt.hex \
-        --networkid=$L1_CHAIN_ID \
         --nodiscover \
         --maxpeers=0
 
@@ -239,11 +242,12 @@ init_l2() {
     # Clear existing data
     rm -rf "$DATA_DIR/l2/geth"
 
-    # Initialize with genesis - using compatible version v1.101408.0
+    # Initialize with genesis - use :latest for ARM64 compatibility
+    # Use --state.scheme=hash to avoid path/hash state scheme conflicts
     docker run --rm \
         -v "$DATA_DIR/l2:/data" \
-        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101408.0 \
-        init --datadir=/data /data/genesis.json
+        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:latest \
+        init --datadir=/data --state.scheme=hash /data/genesis.json
 
     log "op-geth initialized with genesis"
 }
@@ -257,13 +261,13 @@ start_l2_geth() {
     docker stop jeju-op-geth 2>/dev/null || true
     docker rm jeju-op-geth 2>/dev/null || true
 
-    # Use compatible version v1.101408.0
+    # Use :latest for ARM64 compatibility (Oracle Cloud Ampere)
     docker run -d \
         --name jeju-op-geth \
         --network host \
         -v "$DATA_DIR/l2:/data" \
         -v "$DATA_DIR/jwt:/jwt:ro" \
-        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101408.0 \
+        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:latest \
         --datadir=/data \
         --http \
         --http.addr=0.0.0.0 \
@@ -310,13 +314,13 @@ start_l2_node() {
     docker stop jeju-op-node 2>/dev/null || true
     docker rm jeju-op-node 2>/dev/null || true
 
-    # Use compatible version v1.10.1
+    # Use v1.11.0 for ARM64 compatibility (Oracle Cloud Ampere)
     docker run -d \
         --name jeju-op-node \
         --network host \
         -v "$DATA_DIR/l2:/data" \
         -v "$DATA_DIR/jwt:/jwt:ro" \
-        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.10.1 \
+        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.0 \
         op-node \
         --l1=http://localhost:$L1_RPC_PORT \
         --l2=http://localhost:$L2_ENGINE_PORT \
@@ -328,6 +332,7 @@ start_l2_node() {
         --sequencer.enabled \
         --sequencer.l1-confs=0 \
         --verifier.l1-confs=0 \
+        --l1.trustrpc \
         --log.level=info
 
     log "op-node started"
@@ -349,10 +354,11 @@ start_batcher() {
     # Batcher private key (Anvil account #2)
     BATCHER_KEY="0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 
+    # Use :latest for ARM64 compatibility (Oracle Cloud Ampere)
     docker run -d \
         --name jeju-op-batcher \
         --network host \
-        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.10.1 \
+        us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:latest \
         op-batcher \
         --l1-eth-rpc=http://localhost:$L1_RPC_PORT \
         --l2-eth-rpc=http://localhost:$L2_RPC_PORT \

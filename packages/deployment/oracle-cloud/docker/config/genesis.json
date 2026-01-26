@@ -16,13 +16,9 @@
     "grayGlacierBlock": 0,
     "mergeNetsplitBlock": 0,
     "shanghaiTime": 0,
-    "cancunTime": 0,
     "bedrockBlock": 0,
     "regolithTime": 0,
     "canyonTime": 0,
-    "ecotoneTime": 0,
-    "fjordTime": 0,
-    "graniteTime": 0,
     "terminalTotalDifficulty": 0,
     "terminalTotalDifficultyPassed": true,
     "optimism": {
