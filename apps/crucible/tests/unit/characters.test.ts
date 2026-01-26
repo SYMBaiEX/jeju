@@ -23,7 +23,8 @@ describe('Character Definitions', () => {
       expect(ids).toContain('test-coordinator')
       expect(ids).toContain('test-voter')
       expect(ids).toContain('test-computer')
-      expect(ids.length).toBe(10)
+      expect(ids).toContain('test-storage')
+      expect(ids.length).toBe(11)
     })
 
     it('should get character by ID', () => {
@@ -39,7 +40,7 @@ describe('Character Definitions', () => {
     })
 
     it('should have all characters in registry', () => {
-      expect(Object.keys(characters).length).toBe(10)
+      expect(Object.keys(characters).length).toBe(11)
     })
   })
 

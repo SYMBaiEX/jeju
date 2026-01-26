@@ -76,6 +76,16 @@ const TESTNET_BOTS: DefaultBotConfig[] = [
 
 const MAINNET_BOTS: DefaultBotConfig[] = []
 
+// Combined default bots for iteration/testing
+export const DEFAULT_BOTS: DefaultBotConfig[] = [...LOCALNET_BOTS, ...TESTNET_BOTS]
+
+// Chain configurations by network
+export const DEFAULT_CHAINS: Record<string, { chainId: number; name: string; rpcUrl: string; blockTime: number }> = {
+  localnet: { chainId: 31337, name: 'Localnet', rpcUrl: 'http://127.0.0.1:6546', blockTime: 1 },
+  testnet: { chainId: 420690, name: 'Jeju Testnet', rpcUrl: 'https://testnet-rpc.jejunetwork.org', blockTime: 2 },
+  mainnet: { chainId: 420691, name: 'Jeju Mainnet', rpcUrl: 'https://rpc.jejunetwork.org', blockTime: 2 },
+}
+
 export function getDefaultBotsForNetwork(network: string): DefaultBotConfig[] {
   switch (network) {
     case 'localnet':
