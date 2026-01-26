@@ -1,5 +1,5 @@
 import { getNetworkName } from '@jejunetwork/config'
-import { createA2AServer, type A2ASkill, type ProtocolData } from '@jejunetwork/shared'
+import { createA2AServer, type A2AResult, type A2ASkill, type ProtocolData } from '@jejunetwork/shared'
 import { Elysia } from 'elysia'
 import type { Address } from 'viem'
 import { getCharacter } from './characters'
@@ -10,9 +10,10 @@ const log = createLogger('A2A')
 
 const SECURITY_ANALYST_ID = 'security-analyst'
 const AUDIT_SKILL_ID = 'audit-contract'
+const ECHO_SKILL_ID = 'echo'
 const DEFAULT_AUDIT_ROOM = 'base-contract-reviews'
 
-const AUDIT_SKILLS: A2ASkill[] = [
+const A2A_SKILLS: A2ASkill[] = [
   {
     id: AUDIT_SKILL_ID,
     name: 'Audit Contract',
@@ -32,6 +33,25 @@ const AUDIT_SKILLS: A2ASkill[] = [
         room: {
           type: 'string',
           description: 'Optional room to post the audit summary',
+        },
+      },
+    },
+  },
+  {
+    id: ECHO_SKILL_ID,
+    name: 'Echo',
+    description: 'Echo back the provided text payload',
+    tags: ['utility', 'echo'],
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: {
+          type: 'string',
+          description: 'Text to echo back',
+        },
+        message: {
+          type: 'string',
+          description: 'Optional message payload (CALL_AGENT text)',
         },
       },
     },
@@ -74,6 +94,19 @@ function normalizeParams(params: ProtocolData): {
   }
 }
 
+function normalizeEchoParams(params: ProtocolData): { text?: string } {
+  const record = asRecord(params)
+  const nested = asRecord(record.params as ProtocolData | undefined)
+
+  return {
+    text:
+      getString(nested.text) ??
+      getString(record.text) ??
+      getString(nested.message) ??
+      getString(record.message),
+  }
+}
+
 function buildAuditPrompt(url: string, context?: string): string {
   const lines = [`Audit ${url}`]
   if (context) {
@@ -106,12 +139,30 @@ async function getSecurityAnalystRuntime() {
 const a2aServer = createA2AServer({
   name: `${getNetworkName()} Crucible`,
   description: 'Crucible A2A skill router',
-  skills: AUDIT_SKILLS,
+  skills: A2A_SKILLS,
   executeSkill: async (
     skillId: string,
     params: ProtocolData,
     address: Address,
-  ) => {
+  ): Promise<A2AResult> => {
+    if (skillId === ECHO_SKILL_ID) {
+      const echo = normalizeEchoParams(params)
+      const text = echo.text
+      if (!text) {
+        return {
+          message: 'echo requires text or message parameter',
+          data: { error: 'missing_text' },
+        }
+      }
+
+      return {
+        message: text,
+        data: {
+          echo: text,
+        },
+      }
+    }
+
     if (skillId !== AUDIT_SKILL_ID) {
       return {
         message: `Unknown skill: ${skillId}`,
@@ -188,7 +239,7 @@ export const a2aRoutes = new Elysia({ prefix: '/a2a' })
       agentCard: '/.well-known/agent-card.json',
       message: 'POST /',
     },
-    skills: AUDIT_SKILLS.map((skill) => ({
+    skills: A2A_SKILLS.map((skill) => ({
       id: skill.id,
       name: skill.name,
     })),
