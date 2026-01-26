@@ -226,21 +226,44 @@ These forks require a Beacon API (L1 Beacon node). For simplicity, this deployme
 
 ## Pre-built Image (Oracle Cloud)
 
-A working Jeju L2 image is available in the `us-sanjose-1` region:
+A working Jeju L2 image is available:
 
+**Public Download (QCOW2, 1.83 GB):**
 ```
-Image OCID: ocid1.image.oc1.us-sanjose-1.aaaaaaaa4mp76zw6gouybvxuqkuimznt4jfnylwn3xdaihshjflj5wcbilha
-Name: jeju-l2-working-20260126
-Shape: VM.Standard.A1.Flex (ARM64)
+https://objectstorage.us-sanjose-1.oraclecloud.com/n/axhupkjmbqfj/b/jeju-images/o/jeju-l2-arm64.qcow2
 ```
 
-To use this image (requires access to the same tenancy):
+**Oracle Cloud Image OCID** (us-sanjose-1 region):
+```
+ocid1.image.oc1.us-sanjose-1.aaaaaaaa4mp76zw6gouybvxuqkuimznt4jfnylwn3xdaihshjflj5wcbilha
+```
+
+| Property | Value |
+|----------|-------|
+| Name | jeju-l2-working-20260126 |
+| Format | QCOW2 (ARM64) |
+| Size | 1.83 GB |
+| Shape | VM.Standard.A1.Flex |
+| OS | Ubuntu 24.04 |
+
+### Using the Image
+
+**Option 1: Import QCOW2 to any cloud**
+```bash
+# Download
+wget https://objectstorage.us-sanjose-1.oraclecloud.com/n/axhupkjmbqfj/b/jeju-images/o/jeju-l2-arm64.qcow2
+
+# Convert to other formats if needed
+qemu-img convert -f qcow2 -O vmdk jeju-l2-arm64.qcow2 jeju-l2-arm64.vmdk
+```
+
+**Option 2: Use directly in Oracle Cloud (same tenancy)**
 1. Go to **Compute** → **Custom Images**
 2. Find "jeju-l2-working-20260126"
 3. Click **Create Instance**
 4. Select shape: VM.Standard.A1.Flex (4 OCPU, 24 GB recommended)
 
-After launching, SSH in and start the stack:
+**After launching**, SSH in and start the stack:
 ```bash
 cd ~/oracle-cloud/docker
 docker compose up -d
