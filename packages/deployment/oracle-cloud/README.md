@@ -210,6 +210,28 @@ Anvil has issues with block hash stability that cause op-node to fail verificati
 ### Why no Ecotone/Fjord/Granite?
 These forks require a Beacon API (L1 Beacon node). For simplicity, this deployment runs with forks up to Canyon only.
 
+## Pre-built Image (Oracle Cloud)
+
+A working Jeju L2 image is available in the `us-sanjose-1` region:
+
+```
+Image OCID: ocid1.image.oc1.us-sanjose-1.aaaaaaaa4mp76zw6gouybvxuqkuimznt4jfnylwn3xdaihshjflj5wcbilha
+Name: jeju-l2-working-20260126
+Shape: VM.Standard.A1.Flex (ARM64)
+```
+
+To use this image (requires access to the same tenancy):
+1. Go to **Compute** → **Custom Images**
+2. Find "jeju-l2-working-20260126"
+3. Click **Create Instance**
+4. Select shape: VM.Standard.A1.Flex (4 OCPU, 24 GB recommended)
+
+After launching, SSH in and start the stack:
+```bash
+cd ~/oracle-cloud/docker
+docker compose up -d
+```
+
 ## Oracle Cloud CLI
 
 To manage instances and create images:
