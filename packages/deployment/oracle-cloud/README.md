@@ -2,6 +2,20 @@
 
 Deployment scripts and configuration for running Jeju L2 (OP Stack) on Oracle Cloud.
 
+## Oracle Cloud Free Tier
+
+This deployment is designed to run on Oracle Cloud's **Always Free** tier:
+
+- **Compute**: VM.Standard.A1.Flex (ARM64 Ampere) - up to 4 OCPUs, 24 GB RAM **FREE**
+- **Storage**: 200 GB block storage **FREE** (boot volume)
+- **Network**: 10 TB/month outbound **FREE**
+
+**Estimated Costs (Pay-As-You-Go account required):**
+- Object Storage for image export: ~$0.0255/GB/month (~$2.55/month for 100GB image)
+- Additional block storage beyond 200GB: ~$0.0255/GB/month
+
+Sign up at: https://www.oracle.com/cloud/free/
+
 ## Quick Start
 
 ### Step 1: Start L1 First
