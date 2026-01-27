@@ -34,6 +34,7 @@ import {
   getCharacter,
   listCharacters,
 } from "./characters";
+import { COORDINATION_ROOMS, isValidRoomId } from "./constants";
 import { checkDWSHealth } from "./client/dws";
 import { configureCrucible, config as crucibleConfig } from "./config";
 import { a2aRoutes } from "./a2a";
@@ -71,6 +72,23 @@ import { createStorage } from "./sdk/storage";
 import { getDatabase } from "./sdk/database";
 
 const log = createLogger("Server");
+
+// Global error handlers to prevent silent crashes
+process.on("unhandledRejection", (reason, _promise) => {
+  log.error("Unhandled Promise Rejection", {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? (reason.stack ?? "no stack") : "no stack",
+  });
+});
+
+process.on("uncaughtException", (error) => {
+  log.error("Uncaught Exception", {
+    error: error.message,
+    stack: error.stack ?? "no stack",
+  });
+  // Give time for logs to flush, then exit
+  setTimeout(() => process.exit(1), 1000);
+});
 
 // Action counter for tracking daily actions
 const actionCounter = {
@@ -232,14 +250,30 @@ async function verifyAgentOwnership(
   return { authorized: false, reason: "Not authorized to modify this agent" };
 }
 
-// Metrics tracking
+// Metrics tracking with bounded latency window
+const LATENCY_WINDOW_SIZE = 1000; // Keep last 1000 measurements
+const latencyWindow: number[] = [];
 const metrics = {
   requests: { total: 0, success: 0, error: 0 },
   agents: { registered: 0, executions: 0 },
   rooms: { created: 0, messages: 0 },
-  latency: { sum: 0, count: 0 },
   startTime: Date.now(),
 };
+
+// Helper to record latency with bounded memory
+function recordLatency(ms: number): void {
+  latencyWindow.push(ms);
+  if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
+    latencyWindow.shift();
+  }
+}
+
+// Helper to get average latency
+function getAverageLatency(): number {
+  if (latencyWindow.length === 0) return 0;
+  const sum = latencyWindow.reduce((a, b) => a + b, 0);
+  return sum / latencyWindow.length;
+}
 
 // Rate limiting configuration - uses distributed cache
 import { type CacheClient, getCacheClient } from "@jejunetwork/shared";
@@ -957,8 +991,7 @@ app.post("/api/v1/chat/init", async () => {
 // Prometheus Metrics
 app.get("/metrics", ({ set }) => {
   const uptimeSeconds = Math.floor((Date.now() - metrics.startTime) / 1000);
-  const avgLatency =
-    metrics.latency.count > 0 ? metrics.latency.sum / metrics.latency.count : 0;
+  const avgLatency = getAverageLatency();
 
   // Get autonomous agent metrics
   const autonomousStatus = autonomousRunner?.getStatus();
@@ -2137,17 +2170,12 @@ if (crucibleConfig.autonomousEnabled && !autonomousRunner) {
         .then(async () => {
           log.info("Autonomous agent runner started");
 
-          // Room configuration for agent coordination - derived from AUTONOMOUS_AGENTS config
-          const COORDINATION_ROOMS = [
-            { id: "base-contract-reviews", name: "Base Contract Reviews" },
-            { id: "infra-monitoring", name: "Infrastructure Monitoring" },
-            { id: "endpoint-monitoring", name: "Endpoint Monitoring" },
-            { id: "capability-demos", name: "Capability Demos" },
-          ];
-
           // Ensure coordination rooms exist for agent communication
+          // Uses centralized COORDINATION_ROOMS from constants.ts
           try {
             const db = getDatabase();
+            // Ensure database is connected before querying
+            await db.connect();
             for (const room of COORDINATION_ROOMS) {
               const existingRoom = await db.getRoom(room.id);
               if (!existingRoom) {
@@ -2165,16 +2193,75 @@ if (crucibleConfig.autonomousEnabled && !autonomousRunner) {
             });
           }
 
+          // Validate AUTONOMOUS_AGENTS configuration at startup
+          // Fail fast if any agent has invalid character or room config
+          const validationErrors: string[] = [];
+          for (const [agentKey, agentConfig] of Object.entries(AUTONOMOUS_AGENTS)) {
+            // Check character exists
+            const character = getCharacter(agentKey);
+            if (!character) {
+              validationErrors.push(`Agent '${agentKey}' references missing character`);
+            }
+            // Check postToRoom is valid if configured
+            if (agentConfig.postToRoom && !isValidRoomId(agentConfig.postToRoom)) {
+              validationErrors.push(
+                `Agent '${agentKey}' has invalid postToRoom: '${agentConfig.postToRoom}'`
+              );
+            }
+            // Check watchRoom is valid if configured
+            if (agentConfig.watchRoom && !isValidRoomId(agentConfig.watchRoom)) {
+              validationErrors.push(
+                `Agent '${agentKey}' has invalid watchRoom: '${agentConfig.watchRoom}'`
+              );
+            }
+          }
+          if (validationErrors.length > 0) {
+            log.error("AUTONOMOUS_AGENTS configuration validation failed", {
+              errors: validationErrors,
+            });
+            throw new Error(
+              `Invalid AUTONOMOUS_AGENTS configuration:\n${validationErrors.join("\n")}`
+            );
+          }
+          log.info("AUTONOMOUS_AGENTS configuration validated", {
+            agentCount: Object.keys(AUTONOMOUS_AGENTS).length,
+          });
+
           // Load enabled agents from DB and register
           const db = getDatabase();
+          // Ensure database is connected before querying
+          await db.connect();
           const enabledAgents = await db.listAgents({ enabled: 1 });
 
           log.info("Loading autonomous agents from database", {
             count: enabledAgents.length,
           });
 
+          // Get current runner status for idempotency check
+          const runnerStatus = autonomousRunner?.getStatus();
+          const registeredAgentIds = new Set(
+            runnerStatus?.agents.map((a) => a.id) ?? []
+          );
+          const maxAgents = crucibleConfig.maxConcurrentAgents;
+
           for (const dbAgent of enabledAgents) {
             const agentId = dbAgent.agent_id;
+
+            // Idempotency: skip if already registered
+            if (registeredAgentIds.has(agentId)) {
+              log.debug("Agent already registered, skipping", { agentId });
+              continue;
+            }
+
+            // Check max agents limit
+            if (registeredAgentIds.size >= maxAgents) {
+              log.warn("Max concurrent agents reached, skipping remaining", {
+                maxAgents,
+                remaining: enabledAgents.length - registeredAgentIds.size,
+              });
+              break;
+            }
+
             let character = null;
 
             if (/^\d+$/.test(agentId)) {
@@ -2227,6 +2314,9 @@ if (crucibleConfig.autonomousEnabled && !autonomousRunner) {
                 previousTick: runtime.previous_tick ?? 0,
                 lastScheduledRun: runtime.last_scheduled_run ?? 0,
               });
+
+              // Track newly registered agent for idempotency
+              registeredAgentIds.add(agentId);
 
               log.info("Restored autonomous agent from DB", {
                 agentId,

@@ -7,16 +7,12 @@ import {
 } from '@jejunetwork/training'
 import { Elysia } from 'elysia'
 import { agentSdk, autonomousRunner } from '../server'
+import { COORDINATION_ROOMS, ROOMS } from '../constants'
 import { createLogger } from '../sdk/logger'
 import { getCronSecret } from '../sdk/secrets'
 import { DEFAULT_AUTONOMOUS_CONFIG, type CodeFirstConfig } from '../autonomous/types'
 
 const log = createLogger('CronRoutes')
-
-// Coordination room IDs for agent communication
-export const COORDINATION_ROOMS = {
-  BASE_CONTRACT_REVIEWS: 'base-contract-reviews',
-} as const
 
 // Database persistence for trajectory batches (lazy initialized)
 let dbPersistence: TrainingDbPersistence | null = null
@@ -71,35 +67,35 @@ const crucibleTrajectoryStorage = getStaticTrajectoryStorage('crucible', {
 })
 
 /**
- * Ensure coordination rooms exist in the database
+ * Ensure all coordination rooms exist in the database
  * Called on startup before agents are registered
  */
-async function ensureCoordinationRoom(): Promise<void> {
+async function ensureCoordinationRooms(): Promise<void> {
   const { getDatabase } = await import('../sdk/database')
   const db = getDatabase()
 
-  const roomId = COORDINATION_ROOMS.BASE_CONTRACT_REVIEWS
+  for (const room of COORDINATION_ROOMS) {
+    try {
+      const existingRoom = await db.getRoom(room.id)
 
-  try {
-    const existingRoom = await db.getRoom(roomId)
-
-    if (!existingRoom) {
-      log.info('Creating coordination room', { roomId })
-      await db.createRoom({
-        roomId,
-        name: 'Base Contract Reviews',
-        roomType: 'collaboration',
+      if (!existingRoom) {
+        log.info('Creating coordination room', { roomId: room.id })
+        await db.createRoom({
+          roomId: room.id,
+          name: room.name,
+          roomType: 'collaboration',
+        })
+        log.info('Coordination room created', { roomId: room.id })
+      } else {
+        log.debug('Coordination room already exists', { roomId: room.id })
+      }
+    } catch (err) {
+      log.warn('Failed to create coordination room', {
+        roomId: room.id,
+        error: err instanceof Error ? err.message : String(err),
       })
-      log.info('Coordination room created', { roomId })
-    } else {
-      log.debug('Coordination room already exists', { roomId })
+      // Don't block startup - room can be created later
     }
-  } catch (err) {
-    log.warn('Failed to create coordination room', {
-      roomId,
-      error: err instanceof Error ? err.message : String(err),
-    })
-    // Don't block startup - room can be created later
   }
 }
 

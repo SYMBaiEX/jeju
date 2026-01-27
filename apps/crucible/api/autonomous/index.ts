@@ -9,6 +9,7 @@ import {
   TrajectoryRecorder,
 } from '@jejunetwork/training'
 import { checkDWSHealth, getSharedDWSClient } from '../client/dws'
+import { ROOMS } from '../constants'
 import {
   type CrucibleAgentRuntime,
   createCrucibleRuntime,
@@ -809,7 +810,7 @@ export class AutonomousAgentRunner {
     }
 
     if (config.postToRoom && actionResults.length > 0) {
-      const postAllResults = config.postToRoom === 'capability-demos'
+      const postAllResults = config.postToRoom === ROOMS.CAPABILITY_DEMOS
       for (const result of actionResults) {
         const contentToPost = postAllResults
           ? this.formatDemoPost(result.response)

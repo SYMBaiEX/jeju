@@ -3,6 +3,7 @@ import { createA2AServer, type A2AResult, type A2ASkill, type ProtocolData } fro
 import { Elysia } from 'elysia'
 import type { Address } from 'viem'
 import { getCharacter } from './characters'
+import { ROOMS } from './constants'
 import { type RuntimeMessage, runtimeManager } from './sdk/eliza-runtime'
 import { createLogger } from './sdk/logger'
 
@@ -11,7 +12,7 @@ const log = createLogger('A2A')
 const SECURITY_ANALYST_ID = 'security-analyst'
 const AUDIT_SKILL_ID = 'audit-contract'
 const ECHO_SKILL_ID = 'echo'
-const DEFAULT_AUDIT_ROOM = 'base-contract-reviews'
+const DEFAULT_AUDIT_ROOM = ROOMS.BASE_CONTRACT_REVIEWS
 
 const A2A_SKILLS: A2ASkill[] = [
   {

@@ -1,5 +1,6 @@
 import type { AgentCharacter } from '../../lib/types'
 import type { AutonomousAgentConfig } from '../autonomous/types'
+import { ROOMS } from '../constants'
 import { blockscoutWatcherCharacter } from './blockscout-watcher'
 import { communityManagerCharacter } from './community-manager'
 import { dailyDigestCharacter } from './daily-digest'
@@ -41,7 +42,7 @@ type AutonomousAgentOverrides = Partial<
 export const AUTONOMOUS_AGENTS: Record<string, AutonomousAgentOverrides> = {
   // Real-time infrastructure monitoring - probes + alerts when issues detected
   'infra-monitor': {
-    postToRoom: 'infra-monitoring',
+    postToRoom: ROOMS.INFRA_MONITORING,
     tickIntervalMs: 60000,
     executionMode: 'code-first',
     codeFirstConfig: {
@@ -54,8 +55,8 @@ export const AUTONOMOUS_AGENTS: Record<string, AutonomousAgentOverrides> = {
   // Daily digest - summarizes alerts and posts to GitHub
   'daily-digest': {
     schedule: '0 9 * * *', // 9 AM daily
-    watchRoom: 'infra-monitoring',
-    postToRoom: 'infra-monitoring',
+    watchRoom: ROOMS.INFRA_MONITORING,
+    postToRoom: ROOMS.INFRA_MONITORING,
     executionMode: 'code-first',
     codeFirstConfig: {
       primaryAction: 'GENERATE_DAILY_DIGEST',
@@ -65,7 +66,7 @@ export const AUTONOMOUS_AGENTS: Record<string, AutonomousAgentOverrides> = {
   },
   // Registration watcher - announces new agent registrations
   'registration-watcher': {
-    postToRoom: 'infra-monitoring',
+    postToRoom: ROOMS.INFRA_MONITORING,
     tickIntervalMs: 120000, // 2 minutes
     executionMode: 'code-first',
     codeFirstConfig: {
@@ -78,36 +79,36 @@ export const AUTONOMOUS_AGENTS: Record<string, AutonomousAgentOverrides> = {
   // ChainWatch default: Base mainnet example (localnet bootstrap)
   'blockscout-watcher': {
     chainId: 8453, // Base mainnet
-    postToRoom: 'base-contract-reviews',
+    postToRoom: ROOMS.BASE_CONTRACT_REVIEWS,
     tickIntervalMs: 600000, // 10 minutes
     capabilities: { canChat: true, a2a: true, compute: true, canTrade: false, canVote: false, canPropose: false, canDelegate: false, canStake: false, canBridge: false },
   },
   'test-trader': {
-    postToRoom: 'capability-demos',
+    postToRoom: ROOMS.CAPABILITY_DEMOS,
     tickIntervalMs: 300000, // 5 minutes (infrequent for demo)
     executionMode: 'llm-driven',
     capabilities: { canChat: true, canTrade: true, a2a: false, compute: false, canVote: false, canPropose: false, canDelegate: false, canStake: false, canBridge: false },
   },
   'test-coordinator': {
-    postToRoom: 'capability-demos',
+    postToRoom: ROOMS.CAPABILITY_DEMOS,
     tickIntervalMs: 300000, // 5 minutes
     executionMode: 'llm-driven',
     capabilities: { canChat: true, canTrade: false, a2a: true, compute: false, canVote: false, canPropose: false, canDelegate: false, canStake: false, canBridge: false },
   },
   'test-voter': {
-    postToRoom: 'capability-demos',
+    postToRoom: ROOMS.CAPABILITY_DEMOS,
     tickIntervalMs: 300000, // 5 minutes
     executionMode: 'llm-driven',
     capabilities: { canChat: true, canTrade: false, a2a: false, compute: false, canVote: true, canPropose: false, canDelegate: false, canStake: false, canBridge: false },
   },
   'test-computer': {
-    postToRoom: 'capability-demos',
+    postToRoom: ROOMS.CAPABILITY_DEMOS,
     schedule: '*/2 * * * *', // Every 2 minutes (cron-based for testing)
     executionMode: 'llm-driven',
     capabilities: { canChat: true, canTrade: false, a2a: false, compute: true, canVote: false, canPropose: false, canDelegate: false, canStake: false, canBridge: false },
   },
   'test-storage': {
-    postToRoom: 'capability-demos',
+    postToRoom: ROOMS.CAPABILITY_DEMOS,
     tickIntervalMs: 300000, // 5 minutes
     executionMode: 'llm-driven',
     capabilities: { canChat: true, canTrade: false, a2a: false, compute: false, canVote: false, canPropose: false, canDelegate: false, canStake: false, canBridge: false, canStore: true },

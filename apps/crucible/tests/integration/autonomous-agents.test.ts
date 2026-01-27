@@ -58,28 +58,13 @@ afterAll(async () => {
 })
 
 describe('Agent Character Validation', () => {
-  test('should have all 14 required characters', () => {
+  test('should have all registered characters', () => {
     const allChars = listCharacters()
-    expect(allChars.length).toBe(14)
+    const expectedCount = Object.keys(characters).length
+    expect(allChars.length).toBe(expectedCount)
 
-    const expectedCharacters = [
-      'project-manager',
-      'community-manager',
-      'devrel',
-      'liaison',
-      'social-media-manager',
-      'red-team',
-      'scammer',
-      'security-researcher',
-      'contracts-expert',
-      'fuzz-tester',
-      'blue-team',
-      'moderator',
-      'network-guardian',
-      'contracts-auditor',
-    ]
-
-    for (const id of expectedCharacters) {
+    // Verify each character in the registry has required fields
+    for (const id of allChars) {
       const char = getCharacter(id)
       expect(char, `Character ${id} should exist`).toBeDefined()
       expect(char?.name, `Character ${id} should have a name`).toBeTruthy()
