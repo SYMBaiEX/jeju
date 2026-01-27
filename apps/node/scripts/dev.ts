@@ -63,7 +63,7 @@ async function buildFrontend(): Promise<boolean> {
             () => ({
               contents: `
               // Browser mock for Tauri invoke
-              const API_URL = 'http://localhost:${API_PORT}';
+              const API_URL = '';
 
               export async function invoke(cmd, args = {}) {
                 const response = await fetch(\`\${API_URL}/invoke/\${cmd}\`, {
@@ -638,7 +638,7 @@ function startApiServer(): void {
     },
   })
 
-  console.log(`🔌 Mock API server running at http://localhost:${API_PORT}`)
+  console.log(`🔌 Mock API server running at `)
 }
 
 // Start frontend dev server
@@ -735,7 +735,7 @@ async function main(): Promise<void> {
 ✅ Development server ready.
 
    Frontend: http://localhost:${PORT}
-   Mock API: http://localhost:${API_PORT}
+   Mock API: 
 
    Press Ctrl+C to stop.
 `)
