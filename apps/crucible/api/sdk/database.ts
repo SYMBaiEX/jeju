@@ -98,12 +98,30 @@ export class CrucibleDatabase {
     this.timeout = config.timeout ?? 30000
   }
 
+  private lastConnectionAttempt = 0
+  private connectionRetryDelayMs = 5000 // Start with 5s, max 60s
+  private readonly MAX_RETRY_DELAY_MS = 60000
+
   /**
    * Connect to SQLit and verify database exists
+   * Implements retry logic with exponential backoff
    */
   async connect(): Promise<boolean> {
     if (this.state === 'connected') return true
-    if (this.state === 'unavailable') return false
+
+    // If unavailable, check if enough time has passed to retry
+    if (this.state === 'unavailable') {
+      const timeSinceLastAttempt = Date.now() - this.lastConnectionAttempt
+      if (timeSinceLastAttempt < this.connectionRetryDelayMs) {
+        return false // Don't retry yet
+      }
+      // Allow retry after delay
+      this.log.info('Retrying SQLit connection after delay', {
+        delayMs: this.connectionRetryDelayMs,
+      })
+    }
+
+    this.lastConnectionAttempt = Date.now()
 
     try {
       this.log.info('Connecting to SQLit', { endpoint: this.endpoint })
@@ -115,7 +133,14 @@ export class CrucibleDatabase {
 
       if (!statusResponse.ok) {
         this.state = 'unavailable'
-        this.log.warn('SQLit not available')
+        // Increase retry delay with exponential backoff
+        this.connectionRetryDelayMs = Math.min(
+          this.connectionRetryDelayMs * 2,
+          this.MAX_RETRY_DELAY_MS
+        )
+        this.log.warn('SQLit not available', {
+          nextRetryInMs: this.connectionRetryDelayMs,
+        })
         return false
       }
 
@@ -123,13 +148,31 @@ export class CrucibleDatabase {
       await this.initSchema()
 
       this.state = 'connected'
+      this.connectionRetryDelayMs = 5000 // Reset retry delay on success
       this.log.info('Connected to SQLit')
       return true
     } catch (error) {
       this.state = 'unavailable'
-      this.log.warn('Failed to connect to SQLit', { error: String(error) })
+      // Increase retry delay with exponential backoff
+      this.connectionRetryDelayMs = Math.min(
+        this.connectionRetryDelayMs * 2,
+        this.MAX_RETRY_DELAY_MS
+      )
+      this.log.warn('Failed to connect to SQLit', {
+        error: String(error),
+        nextRetryInMs: this.connectionRetryDelayMs,
+      })
       return false
     }
+  }
+
+  /**
+   * Reset connection state to force reconnection attempt
+   */
+  resetConnection(): void {
+    this.state = 'disconnected'
+    this.connectionRetryDelayMs = 5000
+    this.log.info('Connection state reset, will retry on next operation')
   }
 
   get isConnected(): boolean {
@@ -249,6 +292,22 @@ export class CrucibleDatabase {
     await this.fetchQuery(
       'exec',
       `CREATE INDEX IF NOT EXISTS idx_agents_enabled ON agents(enabled)`,
+    )
+
+    // Add source column for tracking agent origin (dev-seed, user, on-chain)
+    try {
+      await this.fetchQuery(
+        'exec',
+        `ALTER TABLE agents ADD COLUMN source TEXT DEFAULT 'unknown'`,
+      )
+    } catch (err) {
+      // Column may already exist, ignore
+    }
+
+    // Create index for source to enable fast cleanup queries
+    await this.fetchQuery(
+      'exec',
+      `CREATE INDEX IF NOT EXISTS idx_agents_source ON agents(source)`,
     )
   }
 
@@ -370,9 +429,10 @@ export class CrucibleDatabase {
     autonomousConfig?: object
     runtimeState?: object
     enabled?: boolean
+    source?: 'dev-seed' | 'user' | 'on-chain' | 'unknown'
   }): Promise<Agent | null> {
     await this.exec(
-      `INSERT INTO agents (agent_id, name, owner, character_cid, state_cid, autonomous_config, runtime_state, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO agents (agent_id, name, owner, character_cid, state_cid, autonomous_config, runtime_state, enabled, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.agentId,
         data.name,
@@ -382,6 +442,7 @@ export class CrucibleDatabase {
         data.autonomousConfig ? JSON.stringify(data.autonomousConfig) : null,
         data.runtimeState ? JSON.stringify(data.runtimeState) : null,
         data.enabled ? 1 : 0,
+        data.source ?? 'unknown',
       ],
     )
 
@@ -453,6 +514,7 @@ export class CrucibleDatabase {
     options: {
       owner?: string
       enabled?: number
+      source?: string
       limit?: number
       offset?: number
     } = {},
@@ -469,6 +531,10 @@ export class CrucibleDatabase {
       conditions.push('enabled = ?')
       values.push(options.enabled)
     }
+    if (options.source) {
+      conditions.push('source = ?')
+      values.push(options.source)
+    }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
@@ -484,6 +550,32 @@ export class CrucibleDatabase {
     }
 
     return this.query<Agent>(sql, values)
+  }
+
+  /**
+   * Delete agents by source (for dev cleanup)
+   * Returns the number of deleted agents
+   */
+  async deleteAgentsBySource(source: string): Promise<number> {
+    const agents = await this.listAgents({ source })
+    if (agents.length === 0) return 0
+
+    await this.exec(
+      `DELETE FROM agents WHERE source = ?`,
+      [source],
+    )
+    return agents.length
+  }
+
+  /**
+   * Delete all agents (for dev cleanup)
+   */
+  async deleteAllAgents(): Promise<number> {
+    const agents = await this.listAgents({})
+    if (agents.length === 0) return 0
+
+    await this.exec(`DELETE FROM agents`, [])
+    return agents.length
   }
 
   // ============================================
