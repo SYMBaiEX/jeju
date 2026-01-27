@@ -5,14 +5,19 @@ Run a complete Jeju environment locally for development.
 ## Quick Start
 
 ```bash
+# Install dependencies (macOS)
 brew install --cask docker
 brew install kurtosis-tech/tap/kurtosis
 curl -fsSL https://bun.sh/install | bash
+curl -L https://foundry.paradigm.xyz | bash && foundryup
 
-cd jeju
+# Clone and run
+git clone https://github.com/JejuNetwork/jeju && cd jeju
 bun install
 bun run dev
 ```
+
+First run takes 5-10 minutes to download images and compile contracts.
 
 ## What Starts
 
@@ -110,3 +115,59 @@ forge script script/DeployMyContract.s.sol \
 3. Test in browser at http://127.0.0.1:4001
 4. Run tests with `bun run test`
 5. Stop with `Ctrl+C` or `bun run localnet:stop`
+
+## ARM64 Deployment (Apple Silicon / Oracle Cloud ARM)
+
+Solidity compiler binaries are x86_64 only. On ARM64 systems, compilation requires x86_64 emulation which is very slow (30+ minutes for initial build).
+
+### Option 1: Use Pre-built Contracts (Recommended)
+
+Download pre-compiled contract artifacts to skip compilation:
+
+```bash
+# Download pre-built artifacts
+curl -L https://objectstorage.us-sanjose-1.oraclecloud.com/n/axhupkjmbqfj/b/jeju-images/o/docker/jeju-contracts-prebuilt-v0.8.33.tar.gz \
+  -o jeju-contracts-prebuilt.tar.gz
+
+# Load Docker image
+docker load < jeju-contracts-prebuilt.tar.gz
+
+# Copy artifacts to your project
+docker run --rm -v $(pwd)/packages/contracts:/target jeju-contracts-prebuilt:v0.8.33 \
+  sh -c "cp -r /contracts/out /target/ && cp -r /contracts/cache /target/"
+
+# Now run dev (skips compilation)
+bun run dev
+```
+
+### Option 2: Enable x86_64 Emulation
+
+Install QEMU for x86_64 emulation (slow but works):
+
+```bash
+# Ubuntu/Debian
+sudo apt install -y qemu-user-static
+
+# Install solc-select
+pipx install solc-select
+solc-select install 0.8.33
+solc-select use 0.8.33
+
+# Configure Foundry to use system solc
+# Edit packages/contracts/foundry.toml:
+# solc = "/home/ubuntu/.solc-select/artifacts/solc-0.8.33/solc-0.8.33"
+```
+
+### Option 3: Cross-compile on x86_64
+
+Build contracts on an x86_64 machine and copy artifacts:
+
+```bash
+# On x86_64 machine
+cd packages/contracts && forge build
+tar -czf contracts-out.tar.gz out cache
+
+# Copy to ARM64 machine and extract
+scp contracts-out.tar.gz arm64-server:~/jeju/packages/contracts/
+ssh arm64-server "cd ~/jeju/packages/contracts && tar -xzf contracts-out.tar.gz"
+```
