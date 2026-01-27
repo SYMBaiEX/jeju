@@ -4,7 +4,7 @@
 #
 # This script:
 # 1. Starts L1 Ethereum via Kurtosis
-# 2. Deploys MockELIZAOS token on L1
+# 2. Deploys ELIZAOS token on L1
 # 3. Funds test accounts with ELIZAOS
 # 4. Deploys L2 with ELIZAOS as custom gas token
 # 5. Deploys core contracts (IdentityRegistry, etc.)
@@ -110,24 +110,24 @@ for i in {1..30}; do
 done
 
 # ============================================================================
-# Step 4: Deploy MockELIZAOS Token on L1
+# Step 4: Deploy ELIZAOS Token on L1
 # ============================================================================
-log "Deploying MockELIZAOS token on L1..."
+log "Deploying ELIZAOS token on L1..."
 
 cd "$CONTRACTS_DIR"
 
 # Build contracts
 forge build --quiet
 
-# Deploy MockELIZAOS
+# Deploy ELIZAOS
 DEPLOY_OUTPUT=$(PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" forge script \
-    script/DeployMockELIZAOS.s.sol:DeployMockELIZAOS \
+    script/DeployELIZAOS.s.sol:DeployELIZAOS \
     --rpc-url "$L1_RPC_URL" \
     --broadcast \
     --json 2>&1)
 
 # Extract deployed address from broadcast
-ELIZAOS_ADDRESS=$(find broadcast -name "*.json" -path "*DeployMockELIZAOS*" -newer /tmp/l1-config.yaml 2>/dev/null | \
+ELIZAOS_ADDRESS=$(find broadcast -name "*.json" -path "*DeployELIZAOS*" -newer /tmp/l1-config.yaml 2>/dev/null | \
     xargs cat 2>/dev/null | jq -r '.transactions[0].contractAddress // empty' | head -1)
 
 if [ -z "$ELIZAOS_ADDRESS" ]; then
@@ -136,10 +136,10 @@ if [ -z "$ELIZAOS_ADDRESS" ]; then
 fi
 
 if [ -z "$ELIZAOS_ADDRESS" ]; then
-    error "Failed to get MockELIZAOS address from deployment"
+    error "Failed to get ELIZAOS address from deployment"
 fi
 
-log "MockELIZAOS deployed at: $ELIZAOS_ADDRESS"
+log "ELIZAOS deployed at: $ELIZAOS_ADDRESS"
 
 # ============================================================================
 # Step 5: Fund Test Accounts with ELIZAOS
@@ -147,7 +147,7 @@ log "MockELIZAOS deployed at: $ELIZAOS_ADDRESS"
 log "Funding test accounts with ELIZAOS..."
 
 PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" ELIZAOS_TOKEN="$ELIZAOS_ADDRESS" forge script \
-    script/DeployMockELIZAOS.s.sol:FundAccountsWithELIZAOS \
+    script/DeployELIZAOS.s.sol:FundAccountsWithELIZAOS \
     --rpc-url "$L1_RPC_URL" \
     --broadcast \
     --quiet || warn "Funding script had issues (may be OK)"
@@ -236,7 +236,7 @@ echo "L1 Ethereum:"
 echo "  RPC: $L1_RPC_URL"
 echo "  Chain ID: 31337 (or check with eth_chainId)"
 echo ""
-echo "MockELIZAOS Token (L1):"
+echo "ELIZAOS Token (L1):"
 echo "  Address: $ELIZAOS_ADDRESS"
 echo "  Symbol: ELIZAOS"
 echo "  Decimals: 18"

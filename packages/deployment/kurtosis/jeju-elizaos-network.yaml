@@ -1,23 +1,23 @@
 # Jeju Network Configuration with $ELIZAOS as Native Gas Token
 #
 # This configuration deploys:
-# - L1: Ethereum (local geth) with MockELIZAOS token
+# - L1: Ethereum (local geth) with ELIZAOS token
 # - L2: Jeju (OP Stack) using ELIZAOS as native gas token
 #
 # Usage:
-#   1. Deploy MockELIZAOS on L1 first (see instructions below)
+#   1. Deploy ELIZAOS on L1 first (see instructions below)
 #   2. Update ELIZAOS_TOKEN_ADDRESS below with deployed address
 #   3. Run: kurtosis run github.com/ethpandaops/optimism-package --args-file jeju-elizaos-network.yaml
 #
 # Pre-requisites:
 #   - Kurtosis installed
 #   - Docker running
-#   - MockELIZAOS deployed on L1
+#   - ELIZAOS deployed on L1
 
 # ============================================================================
-# IMPORTANT: Update this with your deployed MockELIZAOS address
+# IMPORTANT: Update this with your deployed ELIZAOS address
 # ============================================================================
-# After running: forge script DeployMockELIZAOS.s.sol --broadcast
+# After running: forge script DeployELIZAOS.s.sol --broadcast
 # Copy the deployed address here:
 # ELIZAOS_TOKEN_ADDRESS: "0x..." # <-- UPDATE THIS
 

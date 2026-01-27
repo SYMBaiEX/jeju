@@ -2,14 +2,14 @@
 pragma solidity ^0.8.33;
 
 import {Script, console} from "forge-std/Script.sol";
-import {MockELIZAOS} from "../src/tokens/MockELIZAOS.sol";
+import {ELIZAOS} from "../src/tokens/ELIZAOS.sol";
 
 /**
- * @title DeployMockELIZAOS
- * @notice Deploy MockELIZAOS token on L1 for use as Custom Gas Token on L2
+ * @title DeployELIZAOS
+ * @notice Deploy ELIZAOS token on L1 for use as Custom Gas Token on L2
  *
  * Usage:
- *   forge script script/DeployMockELIZAOS.s.sol:DeployMockELIZAOS \
+ *   forge script script/DeployELIZAOS.s.sol:DeployELIZAOS \
  *     --rpc-url $L1_RPC_URL \
  *     --private-key $PRIVATE_KEY \
  *     --broadcast
@@ -19,21 +19,21 @@ import {MockELIZAOS} from "../src/tokens/MockELIZAOS.sol";
  * 2. Configure Kurtosis with this address as custom_gas_token
  * 3. Redeploy L2 with custom gas token enabled
  */
-contract DeployMockELIZAOS is Script {
+contract DeployELIZAOS is Script {
     function run() external returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        console.log("Deploying MockELIZAOS...");
+        console.log("Deploying ELIZAOS...");
         console.log("Deployer:", deployer);
 
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy with deployer as initial token holder
-        MockELIZAOS token = new MockELIZAOS(deployer);
+        ELIZAOS token = new ELIZAOS(deployer);
 
         console.log("");
-        console.log("=== MockELIZAOS Deployed ===");
+        console.log("=== ELIZAOS Deployed ===");
         console.log("Address:", address(token));
         console.log("Name:", token.name());
         console.log("Symbol:", token.symbol());
@@ -70,7 +70,7 @@ contract FundAccountsWithELIZAOS is Script {
         address tokenAddress = vm.envAddress("ELIZAOS_TOKEN");
         uint256 amountPerAccount = 100_000 * 1e18; // 100k ELIZAOS each
 
-        MockELIZAOS token = MockELIZAOS(tokenAddress);
+        ELIZAOS token = ELIZAOS(tokenAddress);
 
         console.log("Funding accounts with ELIZAOS...");
         console.log("Token:", tokenAddress);

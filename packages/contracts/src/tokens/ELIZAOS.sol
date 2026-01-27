@@ -6,8 +6,8 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @title MockELIZAOS
- * @notice Mock ERC20 token that mirrors the real $ELIZAOS token on Ethereum mainnet
+ * @title ELIZAOS
+ * @notice ERC20 token that mirrors the real $ELIZAOS token on Ethereum mainnet
  * @dev Used as the native gas token on Jeju L2 (OP Stack Custom Gas Token)
  *
  * Real token: 0xea17df5cf6d172224892b5477a16acb111182478 on Ethereum mainnet
@@ -17,7 +17,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  * - Users bridge $ELIZAOS from L1 to L2 via OptimismPortal
  * - Sequencer collects $ELIZAOS as revenue
  */
-contract MockELIZAOS is ERC20, ERC20Permit, Ownable {
+contract ELIZAOS is ERC20, ERC20Permit, Ownable {
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10**18; // 1 billion tokens
 
     // Track total minted for cap enforcement

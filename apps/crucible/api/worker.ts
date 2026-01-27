@@ -2649,15 +2649,22 @@ interface ExecutionContext {
 let cachedApp: ReturnType<typeof createCrucibleApp> | null = null
 let cachedEnvHash: string | null = null
 
-function getAppForEnv(env: CrucibleEnv): ReturnType<typeof createCrucibleApp> {
+function getAppForEnv(env?: CrucibleEnv): ReturnType<typeof createCrucibleApp> {
+  // Bun's auto-serve might pass undefined or empty env - fall back to process.env
+  const effectiveEnv: CrucibleEnv = {
+    NETWORK: env?.NETWORK ?? (process.env.NETWORK as CrucibleEnv['NETWORK']) ?? (process.env.JEJU_NETWORK as CrucibleEnv['NETWORK']),
+    TEE_MODE: env?.TEE_MODE ?? (process.env.TEE_MODE as CrucibleEnv['TEE_MODE']) ?? 'simulated',
+    ...env,
+  }
+
   // Create a simple hash of the env to detect changes
-  const envHash = `${env.NETWORK}-${env.TEE_MODE}`
+  const envHash = `${effectiveEnv.NETWORK}-${effectiveEnv.TEE_MODE}`
 
   if (cachedApp && cachedEnvHash === envHash) {
     return cachedApp
   }
 
-  cachedApp = createCrucibleApp(env).compile()
+  cachedApp = createCrucibleApp(effectiveEnv).compile()
   cachedEnvHash = envHash
   return cachedApp
 }
@@ -2696,6 +2703,8 @@ export default {
 }
 
 // Standalone Server (for local dev)
+// Note: Bun 1.1+ auto-serves modules with `export default { fetch }`, so we don't need explicit Bun.serve()
+// The auto-serve uses PORT env var automatically. We just log the startup info here.
 const isMainModule = typeof Bun !== 'undefined' && import.meta.main
 
 if (isMainModule) {
@@ -2707,20 +2716,11 @@ if (isMainModule) {
   const host = getLocalhostHost()
   const network = getCurrentNetwork()
 
-  const app = createCrucibleApp({
-    NETWORK: network,
-    TEE_MODE: 'simulated',
-  })
-
   console.log(`[Crucible] API server running on http://${host}:${port}`)
   console.log(`[Crucible] Network: ${network}`)
   console.log(`[Crucible] Health: http://${host}:${port}/health`)
 
-  Bun.serve({
-    port,
-    hostname: host,
-    fetch: app.fetch,
-  })
+  // Auto-serve from export default { fetch } handles the rest
 }
 
 // Export app for testing

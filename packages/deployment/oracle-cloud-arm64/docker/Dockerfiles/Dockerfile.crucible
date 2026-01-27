@@ -78,12 +78,26 @@ RUN mkdir -p node_modules/@jejunetwork && \
     ln -sf ../../packages/ui node_modules/@jejunetwork/ui && \
     ln -sf ../../packages/workerd node_modules/@jejunetwork/workerd
 
-# Build packages
+# Build packages in dependency order (topologically sorted)
+# Layer 1: No deps
 RUN cd packages/types && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 2: Depends on types only
 RUN cd packages/config && (bun run build 2>/dev/null || bun x tsc || true)
 RUN cd packages/contracts && (bun run build 2>/dev/null || true)
-RUN cd packages/shared && (bun run build 2>/dev/null || bun x tsc || true)
+RUN cd packages/sqlit && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 3: Depends on config
+RUN cd packages/cache && (bun run build 2>/dev/null || bun x tsc || true)
+RUN cd packages/token && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 4: Depends on sqlit/cache
 RUN cd packages/db && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 5: Depends on db
+RUN cd packages/shared && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 6: Depends on shared
+RUN cd packages/kms && (bun run build 2>/dev/null || bun x tsc || true)
+RUN cd packages/sdk && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 7: Depends on kms
+RUN cd packages/auth && (bun run build 2>/dev/null || bun x tsc || true)
+# Layer 8: Depends on auth, sdk
 RUN cd packages/ui && (bun run build 2>/dev/null || bun x tsc || true)
 
 # Build crucible
@@ -105,8 +119,13 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/crucible ./apps/crucible
 COPY --from=builder /app/tsconfig.base.json ./
 
+# Remove UI and auth dist folders so bun uses TypeScript source directly
+# (uses "bun" export condition instead of "import" which requires dist/*)
+RUN rm -rf packages/ui/dist packages/auth/dist
+
 # Create workspace symlinks for runtime
 RUN mkdir -p node_modules/@jejunetwork && \
+    ln -sf ../../packages/auth node_modules/@jejunetwork/auth && \
     ln -sf ../../packages/config node_modules/@jejunetwork/config && \
     ln -sf ../../packages/types node_modules/@jejunetwork/types && \
     ln -sf ../../packages/shared node_modules/@jejunetwork/shared && \
@@ -114,6 +133,7 @@ RUN mkdir -p node_modules/@jejunetwork && \
     ln -sf ../../packages/db node_modules/@jejunetwork/db && \
     ln -sf ../../packages/api node_modules/@jejunetwork/api && \
     ln -sf ../../packages/cache node_modules/@jejunetwork/cache && \
+    ln -sf ../../packages/kms node_modules/@jejunetwork/kms && \
     ln -sf ../../packages/messaging node_modules/@jejunetwork/messaging && \
     ln -sf ../../packages/sdk node_modules/@jejunetwork/sdk && \
     ln -sf ../../packages/training node_modules/@jejunetwork/training && \
