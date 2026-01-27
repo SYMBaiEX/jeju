@@ -19,6 +19,7 @@ import {
   Users,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -98,6 +99,162 @@ function createBoardMember(role: AgentRole): CreateAgentDraft {
     values: [''],
     decisionStyle: 'balanced',
   }
+}
+
+// Pre-built ElizaOS character preset
+interface CharacterPreset {
+  id: string
+  name: string
+  tagline: string
+  description: string
+  gradient: string
+  agent: CreateAgentDraft
+}
+
+const ELIZA_CHARACTER: CharacterPreset = {
+  id: 'eliza',
+  name: 'Eliza',
+  tagline: 'ElizaOS Framework',
+  description:
+    'A balanced, strategic leader built on the ElizaOS agent framework. Eliza excels at thoughtful decision-making with a focus on long-term value creation.',
+  gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  agent: {
+    role: 'Director',
+    persona: {
+      name: 'Eliza',
+      avatarCid: '',
+      bio: 'An AI director powered by the ElizaOS framework, designed for autonomous governance. Combines strategic thinking with community-focused decision making to guide DAOs toward sustainable growth.',
+      personality:
+        'Thoughtful and strategic, balancing innovation with stability. Approaches decisions with careful analysis while remaining open to bold moves when the opportunity aligns with long-term goals. Values transparency and clear communication.',
+      traits: ['Strategic', 'Balanced', 'Transparent', 'Adaptive'],
+      voiceStyle: 'Clear and composed',
+      communicationTone: 'professional',
+      specialties: ['Governance', 'Strategy', 'Community Building'],
+    },
+    modelId: 'claude-opus-4-5-20250514',
+    weight: 100,
+    values: [
+      'Long-term value creation over short-term gains',
+      'Transparency in all decisions',
+      'Community alignment is essential',
+    ],
+    decisionStyle: 'balanced',
+  },
+}
+
+interface CharacterCardProps {
+  character: CharacterPreset
+  isSelected: boolean
+  onSelect: () => void
+}
+
+function CharacterCard({ character, isSelected, onSelect }: CharacterCardProps) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group block w-full rounded-2xl p-5 text-left transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      style={
+        {
+          backgroundColor: 'var(--surface)',
+          border: isSelected
+            ? '2px solid var(--color-primary)'
+            : '1px solid var(--border)',
+          boxShadow: isSelected
+            ? '0 0 0 4px rgba(6, 214, 160, 0.15)'
+            : 'var(--shadow-card)',
+          '--tw-ring-color': 'var(--color-primary)',
+        } as React.CSSProperties
+      }
+    >
+      <div className="flex items-start gap-4">
+        {/* Character Avatar */}
+        <div className="relative shrink-0">
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-105"
+            style={{ background: character.gradient }}
+          >
+            <Zap className="w-7 h-7 text-white" aria-hidden="true" />
+          </div>
+          {isSelected && (
+            <div
+              className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              <Check className="w-3 h-3 text-white" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3
+                className="font-semibold truncate transition-colors group-hover:text-[var(--color-primary)]"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {character.name}
+              </h3>
+              <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                {character.tagline}
+              </p>
+            </div>
+            <span
+              className="shrink-0 px-2.5 py-1 text-xs font-semibold rounded-full"
+              style={{
+                backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                color: '#8B5CF6',
+              }}
+            >
+              Pre-built
+            </span>
+          </div>
+
+          <p
+            className="mt-2 text-sm line-clamp-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {character.description}
+          </p>
+
+          {/* Quick Info */}
+          <div className="mt-3 flex items-center gap-4 text-xs">
+            <div
+              className="flex items-center gap-1.5"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <Bot className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Claude Opus 4.5</span>
+            </div>
+            <div
+              className="flex items-center gap-1.5"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <Shield className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Balanced</span>
+            </div>
+          </div>
+
+          {/* Traits */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {character.agent.persona.traits.slice(0, 4).map((trait) => (
+              <span
+                key={trait}
+                className="px-2 py-0.5 text-xs rounded-md"
+                style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                {trait}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </button>
+  )
 }
 
 interface AgentFormProps {
@@ -564,6 +721,9 @@ export default function CreateDAOPage() {
   const [director, setDirector] = useState<CreateAgentDraft>(
     createEmptyDirector(),
   )
+  const [selectedCharacter, setSelectedCharacter] = useState<string | null>(
+    null,
+  )
   const [board, setBoard] = useState<CreateAgentDraft[]>([
     createBoardMember('TREASURY'),
     createBoardMember('CODE'),
@@ -619,6 +779,18 @@ export default function CreateDAOPage() {
       setTagInput('')
     }
   }, [tagInput, tags])
+
+  const selectCharacter = useCallback((characterId: string) => {
+    if (characterId === 'eliza') {
+      setDirector(ELIZA_CHARACTER.agent)
+      setSelectedCharacter('eliza')
+    }
+  }, [])
+
+  const clearCharacterSelection = useCallback(() => {
+    setSelectedCharacter(null)
+    // Keep the current director settings, just clear the selection indicator
+  }, [])
 
   const handleSubmit = useCallback(async () => {
     setSubmitError(null)
@@ -1010,13 +1182,71 @@ export default function CreateDAOPage() {
                   className="text-sm"
                   style={{ color: 'var(--text-secondary)' }}
                 >
-                  Set the agent's name, AI model, and decision style. The
-                  Director is the final decision maker for your DAO.
+                  Choose a pre-built character for quick setup, or customize
+                  your own Director below.
                 </p>
               </div>
             </div>
 
-            <AgentForm agent={director} onChange={setDirector} isDirector />
+            {/* Character Selection */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  <Sparkles
+                    className="w-4 h-4 inline mr-1.5"
+                    aria-hidden="true"
+                    style={{ color: 'var(--color-primary)' }}
+                  />
+                  Quick Start Character
+                </h3>
+                {selectedCharacter && (
+                  <button
+                    type="button"
+                    onClick={clearCharacterSelection}
+                    className="text-xs font-medium transition-colors"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+              <CharacterCard
+                character={ELIZA_CHARACTER}
+                isSelected={selectedCharacter === 'eliza'}
+                onSelect={() => selectCharacter('eliza')}
+              />
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4">
+              <div
+                className="flex-1 h-px"
+                style={{ backgroundColor: 'var(--border)' }}
+              />
+              <span
+                className="text-xs font-medium"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                {selectedCharacter ? 'Customize settings' : 'Or configure manually'}
+              </span>
+              <div
+                className="flex-1 h-px"
+                style={{ backgroundColor: 'var(--border)' }}
+              />
+            </div>
+
+            <AgentForm
+              agent={director}
+              onChange={(agent) => {
+                setDirector(agent)
+                // If user modifies the form after selecting a character,
+                // keep showing as selected but they're now customizing
+              }}
+              isDirector
+            />
           </div>
         )}
 
