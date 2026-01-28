@@ -193,6 +193,38 @@ export function Staking() {
         </div>
       )}
 
+      {/* Your Stake */}
+      {parseFloat(staking?.total_staked_wei ?? '0') > 0 && (
+        <div className="card bg-gradient-to-r from-jeju-600/10 to-purple-600/10 border-jeju-500/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-jeju-600/20">
+                <Lock size={24} className="text-jeju-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Your Staked JEJU</h3>
+                <p className="text-2xl font-bold text-jeju-400">
+                  {formatEther(staking?.total_staked_wei ?? '0')} JEJU
+                </p>
+                <p className="text-sm text-volcanic-400">
+                  Multi-service stake backing all network services
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setStakingService('multi-service')
+                setIsUnstaking(true)
+              }}
+              className="btn-ghost"
+            >
+              Unstake
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stakes by Service */}
       <div className="card">
         <h2 className="text-lg font-semibold mb-4">Stakes by Service</h2>
