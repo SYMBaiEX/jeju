@@ -2,38 +2,17 @@
 /**
  * Otto API Server
  *
- * Minimal API server for development and testing.
- * Full Otto functionality requires ElizaOS runtime.
+ * Development server that wraps the worker with hot reload support.
+ * Uses the same createOttoApp from worker.ts for consistency.
  */
-import { cors } from '@elysiajs/cors'
 import { getLocalhostHost, getNetworkName } from '@jejunetwork/config'
-import { Elysia } from 'elysia'
+import { createOttoApp } from './worker'
 
 const PORT = Number(process.env.OTTO_PORT) || 4050
 const networkName = getNetworkName()
 const host = getLocalhostHost()
 
-const app = new Elysia()
-  .use(cors())
-  .get('/health', () => ({
-    status: 'ok',
-    service: 'otto',
-    network: networkName,
-    timestamp: new Date().toISOString(),
-  }))
-  .get('/', () => ({
-    name: 'Otto API',
-    version: '1.0.0',
-    description: 'Otto ElizaOS trading bot API',
-    network: networkName,
-  }))
-  .get('/status', () => ({
-    running: true,
-    network: networkName,
-    elizaRuntime: false,
-    message:
-      'Otto is running in minimal API mode. Full features require ElizaOS runtime.',
-  }))
+const app = createOttoApp()
 
 if (import.meta.main) {
   console.log(`🤖 Otto API running at http://${host}:${PORT}`)

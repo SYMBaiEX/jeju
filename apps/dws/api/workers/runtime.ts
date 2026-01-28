@@ -94,7 +94,9 @@ const workerEnv = {
   DWS_URL: process.env.DWS_URL || 'https://dws.testnet.jejunetwork.org',
   GATEWAY_URL: process.env.GATEWAY_URL || 'https://gateway.testnet.jejunetwork.org',
   INDEXER_URL: process.env.INDEXER_URL || 'https://indexer.testnet.jejunetwork.org/graphql',
-  KMS_URL: process.env.KMS_URL || 'https://kms.testnet.jejunetwork.org',
+  KMS_URL:
+    process.env.KMS_URL ||
+    (process.env.DWS_URL || 'https://dws.testnet.jejunetwork.org') + '/kms',
   OAUTH3_URL: process.env.OAUTH3_URL || 'https://oauth3.testnet.jejunetwork.org',
   // Worker identity for KMS auth
   FUNCTION_ID: process.env.FUNCTION_ID || '',
@@ -104,8 +106,20 @@ const workerEnv = {
   KMS_SECRET_IDS: process.env.KMS_SECRET_IDS || '',
   // SQLit configuration (non-sensitive)
   // SECURITY: SQLIT_PRIVATE_KEY must come from KMS in production
-  SQLIT_NODES: process.env.SQLIT_NODES || process.env.SQLIT_URL || '',
-  SQLIT_URL: process.env.SQLIT_URL || process.env.SQLIT_NODES || '',
+  SQLIT_NODES:
+    process.env.SQLIT_NODES ||
+    process.env.SQLIT_URL ||
+    process.env.SQLIT_HTTP_URL ||
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ||
+    process.env.SQLIT_MINER_ENDPOINT ||
+    '',
+  SQLIT_URL:
+    process.env.SQLIT_URL ||
+    process.env.SQLIT_NODES ||
+    process.env.SQLIT_HTTP_URL ||
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ||
+    process.env.SQLIT_MINER_ENDPOINT ||
+    '',
   SQLIT_DATABASE_ID: process.env.SQLIT_DATABASE_ID || '',
   SQLIT_KMS_KEY_ID: process.env.SQLIT_KMS_KEY_ID || '',
   SQLIT_MINER_ENDPOINT: process.env.SQLIT_MINER_ENDPOINT || '',
@@ -147,7 +161,7 @@ async function startWorker() {
     // Create a server wrapping the fetch handler
     console.log('[Bootstrap] Starting fetch-handler server on port ' + PORT);
     
-    const server = Bun.serve({
+    const _server = Bun.serve({
       port: PORT,
       async fetch(request) {
         try {
@@ -766,8 +780,49 @@ export class WorkerRuntime {
 
     console.log(`[WorkerRuntime] Downloading code from storage: ${cid}`)
 
-    // Download from storage
-    const result = await this.backend.download(cid)
+    // Download from storage (with IPFS gateway fallback)
+    let result: { content: Buffer; backend: string }
+    try {
+      result = await this.backend.download(cid)
+    } catch (backendError) {
+      console.log(
+        `[WorkerRuntime] Backend download failed, trying IPFS gateway: ${cid}`,
+      )
+
+      // Try IPFS gateway as fallback
+      const ipfsGatewayUrls = [
+        `https://ipfs.testnet.jejunetwork.org/ipfs/${cid}`,
+        `https://ipfs.jejunetwork.org/ipfs/${cid}`,
+        `https://dweb.link/ipfs/${cid}`,
+        `https://cloudflare-ipfs.com/ipfs/${cid}`,
+      ]
+
+      let gatewayContent: Buffer | null = null
+      for (const gatewayUrl of ipfsGatewayUrls) {
+        try {
+          const response = await fetch(gatewayUrl, {
+            signal: AbortSignal.timeout(30000),
+          })
+          if (response.ok) {
+            gatewayContent = Buffer.from(await response.arrayBuffer())
+            console.log(
+              `[WorkerRuntime] Downloaded from IPFS gateway: ${gatewayUrl}`,
+            )
+            break
+          }
+        } catch {
+          // Try next gateway
+        }
+      }
+
+      if (!gatewayContent) {
+        throw new Error(
+          `Failed to download code: ${cid}. Backend error: ${backendError instanceof Error ? backendError.message : String(backendError)}`,
+        )
+      }
+
+      result = { content: gatewayContent, backend: 'ipfs-gateway' }
+    }
 
     // Create worker directory
     const tempDir = `/tmp/dws-workers/${cid}`

@@ -9,10 +9,9 @@
  * - Reconnection on failure
  */
 
-import { getCurrentNetwork } from '@jejunetwork/config'
+import { getCurrentNetwork, getDWSUrl } from '@jejunetwork/config'
 import { privateKeyToAccount, signMessage } from 'viem/accounts'
 import { z } from 'zod'
-import { config } from './config'
 
 // Response schemas
 const ProvisionResponseSchema = z.object({
@@ -72,6 +71,8 @@ export async function getDatabaseCredentials(): Promise<DatabaseCredentials> {
     return cachedCredentials
   }
 
+  const dwsUrl = getDWSUrl()
+
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY ?? process.env.PRIVATE_KEY
   if (!privateKey) {
     throw new Error(
@@ -87,7 +88,7 @@ export async function getDatabaseCredentials(): Promise<DatabaseCredentials> {
 
   // Check if we already have a provisioned database
   const existingResponse = await fetch(
-    `${config.dwsUrl}/database/postgres/${instanceName}`,
+    `${dwsUrl}/database/postgres/${instanceName}`,
     {
       headers: {
         'x-wallet-address': account.address,
@@ -141,7 +142,7 @@ export async function getDatabaseCredentials(): Promise<DatabaseCredentials> {
   })
 
   const provisionResponse = await fetch(
-    `${config.dwsUrl}/database/postgres/provision`,
+    `${dwsUrl}/database/postgres/provision`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -216,8 +217,9 @@ export async function configureDWSDatabase(): Promise<void> {
 export async function checkDatabaseHealth(
   instanceId: string,
 ): Promise<boolean> {
+  const dwsUrl = getDWSUrl()
   const response = await fetch(
-    `${config.dwsUrl}/database/postgres/${instanceId}/health`,
+    `${dwsUrl}/database/postgres/${instanceId}/health`,
   )
 
   if (!response.ok) {

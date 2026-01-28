@@ -3,6 +3,7 @@ import {
   getEnvNumber,
   getEnvVar,
   getIpfsGatewayUrl,
+  getL2RpcUrl,
   isProductionEnv,
 } from '@jejunetwork/config'
 
@@ -49,9 +50,6 @@ export interface IndexerConfig {
 
   // IPFS
   ipfsGateway: string
-
-  // DWS
-  dwsUrl: string
 }
 
 const { config, configure: setIndexerConfig } = createAppConfig<IndexerConfig>({
@@ -74,14 +72,14 @@ const { config, configure: setIndexerConfig } = createAppConfig<IndexerConfig>({
 
   // Chain
   chainId: getEnvNumber('CHAIN_ID') ?? 420691,
-  rpcEthHttp: getEnvVar('RPC_ETH_HTTP') ?? '',
+  rpcEthHttp: getEnvVar('RPC_ETH_HTTP') ?? getL2RpcUrl(),
   startBlock: getEnvNumber('START_BLOCK') ?? 0,
 
   // Server
-  port: getEnvNumber('PORT') ?? 4000,
-  restPort: getEnvNumber('REST_PORT') ?? 4004,
-  mcpPort: getEnvNumber('MCP_PORT') ?? 4002,
-  a2aPort: getEnvNumber('A2A_PORT') ?? 4003,
+  port: getEnvNumber('PORT') ?? 4350,
+  restPort: getEnvNumber('REST_PORT') ?? 4352,
+  mcpPort: getEnvNumber('MCP_PORT') ?? 4353,
+  a2aPort: getEnvNumber('A2A_PORT') ?? 4351,
   isProduction: isProductionEnv(),
 
   // Security
@@ -96,10 +94,10 @@ const { config, configure: setIndexerConfig } = createAppConfig<IndexerConfig>({
   ethUsdPrice: getEnvNumber('ETH_USD_PRICE') ?? 2000,
 
   // IPFS - use gateway URL from config, fallback to localhost for local dev
-  ipfsGateway: getEnvVar('IPFS_GATEWAY') ?? getIpfsGatewayUrl() ?? 'http://127.0.0.1:4030/cdn',
-
-  // DWS - use env var or default to localhost
-  dwsUrl: getEnvVar('DWS_URL') ?? 'http://127.0.0.1:4030',
+  ipfsGateway:
+    getEnvVar('IPFS_GATEWAY') ??
+    getIpfsGatewayUrl() ??
+    'http://127.0.0.1:4030/cdn',
 })
 
 export { config }

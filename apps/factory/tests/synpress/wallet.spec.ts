@@ -3,6 +3,7 @@
  * Tests wallet connection, transactions, and on-chain operations
  */
 
+import type { Page } from '@playwright/test'
 import { testWithSynpress } from '@synthetixio/synpress'
 import { MetaMask, metaMaskFixtures } from '@synthetixio/synpress/playwright'
 import { basicSetup } from '../../synpress.config'
@@ -10,11 +11,19 @@ import { basicSetup } from '../../synpress.config'
 const test = testWithSynpress(metaMaskFixtures(basicSetup))
 const { expect } = test
 
+async function openWalletLogin(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /sign in/i }).click()
+  const walletOption = page.getByRole('button', { name: /connect wallet/i })
+  if (await walletOption.isVisible().catch(() => false)) {
+    await walletOption.click()
+  }
+}
+
 test.describe('Wallet Connection', () => {
-  test('shows connect wallet button when disconnected', async ({ page }) => {
+  test('shows sign in button when disconnected', async ({ page }) => {
     await page.goto('/')
     await expect(
-      page.getByRole('button', { name: /connect wallet/i }),
+      page.getByRole('button', { name: /sign in/i }),
     ).toBeVisible()
   })
 
@@ -32,7 +41,7 @@ test.describe('Wallet Connection', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
+    await openWalletLogin(page)
 
     const metamaskOption = page.getByText(/metamask/i)
     if (await metamaskOption.isVisible()) {
@@ -59,7 +68,7 @@ test.describe('Wallet Connection', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
+    await openWalletLogin(page)
 
     const metamaskOption = page.getByText(/metamask/i)
     if (await metamaskOption.isVisible()) {
@@ -86,7 +95,7 @@ test.describe('Wallet Connection', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
+    await openWalletLogin(page)
 
     const metamaskOption = page.getByText(/metamask/i)
     if (await metamaskOption.isVisible()) {
@@ -103,7 +112,7 @@ test.describe('Wallet Connection', () => {
     await page.getByRole('button', { name: /disconnect/i }).click()
 
     await expect(
-      page.getByRole('button', { name: /connect wallet/i }),
+      page.getByRole('button', { name: /sign in/i }),
     ).toBeVisible()
   })
 })
@@ -123,13 +132,7 @@ test.describe('Bounty Transactions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/bounties/new')
@@ -160,13 +163,7 @@ test.describe('Bounty Transactions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/bounties/1')
@@ -197,13 +194,7 @@ test.describe('Bounty Transactions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/bounties/1')
@@ -239,13 +230,7 @@ test.describe('Guardian Actions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/guardians')
@@ -276,13 +261,7 @@ test.describe('Guardian Actions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/bounties/1')
@@ -310,13 +289,7 @@ test.describe('Model Registration', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/models/upload')
@@ -348,13 +321,7 @@ test.describe('Container Registration', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/containers/push')
@@ -386,13 +353,7 @@ test.describe('Project Board Transactions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/projects/new')
@@ -419,13 +380,7 @@ test.describe('Project Board Transactions', () => {
     )
 
     await page.goto('/')
-    await page.getByRole('button', { name: /connect wallet/i }).click()
-
-    const metamaskOption = page.getByText(/metamask/i)
-    if (await metamaskOption.isVisible()) {
-      await metamaskOption.click()
-    }
-
+    await openWalletLogin(page)
     await metamask.connectToDapp()
 
     await page.goto('/projects/1')

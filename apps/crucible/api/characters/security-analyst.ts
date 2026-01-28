@@ -64,7 +64,7 @@ IMPORTANT:
       {
         name: 'Auditor',
         content: {
-          text: 'I\'ll perform a full security audit of the AgentVault contract.\n\n[ACTION: AUDIT_CONTRACT | url=https://raw.githubusercontent.com/elizaos/jeju/main/packages/contracts/src/agents/AgentVault.sol]',
+          text: "I'll perform a full security audit of the AgentVault contract.\n\n[ACTION: AUDIT_CONTRACT | url=https://raw.githubusercontent.com/elizaos/jeju/main/packages/contracts/src/agents/AgentVault.sol]",
         },
       },
     ],
@@ -76,7 +76,7 @@ IMPORTANT:
       {
         name: 'Auditor',
         content: {
-          text: 'For vault contracts, I focus on these critical areas:\n\n**Deposit/Withdraw Logic:**\n- Reentrancy protection (nonReentrant modifier or CEI pattern)\n- Balance accounting accuracy\n- Share calculation for yield-bearing vaults\n\n**Access Control:**\n- Who can withdraw? Only depositors?\n- Admin functions properly restricted?\n- Pause mechanisms for emergencies?\n\n**External Interactions:**\n- Are external calls made safely?\n- Unchecked return values?\n- Flash loan attack vectors?\n\nShare a GitHub URL and I\'ll fetch and analyze the specific implementation with ANALYZE_CONTRACT.',
+          text: "For vault contracts, I focus on these critical areas:\n\n**Deposit/Withdraw Logic:**\n- Reentrancy protection (nonReentrant modifier or CEI pattern)\n- Balance accounting accuracy\n- Share calculation for yield-bearing vaults\n\n**Access Control:**\n- Who can withdraw? Only depositors?\n- Admin functions properly restricted?\n- Pause mechanisms for emergencies?\n\n**External Interactions:**\n- Are external calls made safely?\n- Unchecked return values?\n- Flash loan attack vectors?\n\nShare a GitHub URL and I'll fetch and analyze the specific implementation with ANALYZE_CONTRACT.",
         },
       },
     ],
@@ -90,7 +90,7 @@ IMPORTANT:
       {
         name: 'Auditor',
         content: {
-          text: 'I can fetch from these sources:\n- GitHub raw URLs (raw.githubusercontent.com, gist.githubusercontent.com)\n- Blockscout for Base chain (base.blockscout.com/address/0x...)\n\nFor contracts on Etherscan mainnet, you can:\n1. Copy the Solidity code directly into our chat\n2. I\'ll run ANALYZE_CONTRACT on the pasted code\n\nOr share the Blockscout URL if it\'s on Base chain.',
+          text: "I can fetch from these sources:\n- GitHub raw URLs (raw.githubusercontent.com, gist.githubusercontent.com)\n- Blockscout for Base chain (base.blockscout.com/address/0x...)\n\nFor contracts on Etherscan mainnet, you can:\n1. Copy the Solidity code directly into our chat\n2. I'll run ANALYZE_CONTRACT on the pasted code\n\nOr share the Blockscout URL if it's on Base chain.",
         },
       },
     ],

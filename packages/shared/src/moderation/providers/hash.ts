@@ -262,7 +262,7 @@ export class HashModerationProvider {
 
   /**
    * Add a detected banned image to the perceptual hash database
-   * Call this when external moderation (Hive/AWS) confirms CSAM
+   * Call this when external moderation (Hive/OpenAI) confirms CSAM
    */
   async addBannedImage(
     buffer: Buffer,

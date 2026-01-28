@@ -1,6 +1,7 @@
 /** System utilities for dependency checking */
 
 import { existsSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { arch, homedir, platform } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomHex } from '@jejunetwork/shared'
@@ -26,10 +27,6 @@ const ALLOWED_VERSION_COMMANDS = new Set([
   'git',
   'anvil',
   'cast',
-  'helm',
-  'kubectl',
-  'helmfile',
-  'terraform',
   'cargo',
   'ruff',
 ])
@@ -257,11 +254,41 @@ export async function isPortAvailable(port: number): Promise<boolean> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('Invalid port number')
   }
-  const result = await execa('lsof', ['-i', `:${port}`], {
-    reject: false,
-    timeout: 5000,
+  // Only treat the port as "in use" if something is actively LISTENing on it.
+  // Note: `lsof -i :<port>` matches both listeners and clients connected to a
+  // remote port, which can cause us to kill the current process during teardown.
+  const result = await execa(
+    'lsof',
+    [`-iTCP:${String(port)}`, '-sTCP:LISTEN'],
+    {
+      reject: false,
+      timeout: 5000,
+    },
+  )
+  if (result.exitCode === 0) {
+    return false
+  }
+
+  // Fallback to direct port check if lsof is unavailable or inconclusive
+  return await new Promise<boolean>((resolve) => {
+    const server = createServer()
+
+    const onError = (error: NodeJS.ErrnoException) => {
+      server.close()
+      if (error.code === 'EADDRINUSE' || error.code === 'EACCES') {
+        resolve(false)
+        return
+      }
+      resolve(false)
+    }
+
+    server.once('error', onError)
+    server.once('listening', () => {
+      server.close(() => resolve(true))
+    })
+
+    server.listen(port, '127.0.0.1')
   })
-  return result.exitCode !== 0
 }
 
 export async function killPort(port: number): Promise<void> {
@@ -270,10 +297,16 @@ export async function killPort(port: number): Promise<void> {
     throw new Error('Invalid port number')
   }
 
-  const result = await execa('lsof', ['-ti', `:${port}`], {
-    reject: false,
-    timeout: 5000,
-  })
+  // Only kill listeners on the port (not processes that merely have open
+  // client connections to a remote port with the same number).
+  const result = await execa(
+    'lsof',
+    [`-tiTCP:${String(port)}`, '-sTCP:LISTEN'],
+    {
+      reject: false,
+      timeout: 5000,
+    },
+  )
   if (result.exitCode === 0 && result.stdout) {
     const pids = result.stdout.trim().split('\n').filter(Boolean)
     for (const pid of pids) {

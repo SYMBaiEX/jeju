@@ -1,37 +1,46 @@
+import type { JsonValue } from '@jejunetwork/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LoadingSpinner } from '../components/LoadingSpinner'
-import { API_URL } from '../config'
+import { useAuthenticatedFetch, useCharacters } from '../hooks'
 
 interface ActivityEntry {
   action: string
   timestamp: number
   success: boolean
-  result?: unknown
+  result?: JsonValue
+}
+
+interface AutonomousAgentStatus {
+  id: string
+  character: string
+  lastTick: number
+  tickCount: number
+  recentActivity: ActivityEntry[]
 }
 
 interface AutonomousStatus {
   enabled: boolean
   running?: boolean
   agentCount?: number
-  agents?: Array<{
-    id: string
-    character: string
-    lastTick: number
-    tickCount: number
-    recentActivity: ActivityEntry[]
-  }>
+  agents?: AutonomousAgentStatus[]
   message?: string
 }
 
+interface RegisterAgentRequest {
+  characterId: string
+  tickIntervalMs?: number
+}
+
 function useAutonomousStatus() {
+  const { authenticatedFetch } = useAuthenticatedFetch()
   return useQuery({
     queryKey: ['autonomous-status'],
     queryFn: async (): Promise<AutonomousStatus> => {
-      const response = await fetch(`${API_URL}/api/v1/autonomous/status`)
-      if (!response.ok) throw new Error('Failed to fetch status')
-      return response.json()
+      return authenticatedFetch<AutonomousStatus>('/api/v1/autonomous/status', {
+        requireAuth: false,
+      })
     },
     refetchInterval: 5000,
   })
@@ -39,13 +48,13 @@ function useAutonomousStatus() {
 
 function useStartRunner() {
   const queryClient = useQueryClient()
+  const { authenticatedFetch } = useAuthenticatedFetch()
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${API_URL}/api/v1/autonomous/start`, {
+      return authenticatedFetch('/api/v1/autonomous/start', {
         method: 'POST',
+        requireAuth: true,
       })
-      if (!response.ok) throw new Error('Failed to start runner')
-      return response.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autonomous-status'] })
@@ -55,13 +64,30 @@ function useStartRunner() {
 
 function useStopRunner() {
   const queryClient = useQueryClient()
+  const { authenticatedFetch } = useAuthenticatedFetch()
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${API_URL}/api/v1/autonomous/stop`, {
+      return authenticatedFetch('/api/v1/autonomous/stop', {
         method: 'POST',
+        requireAuth: true,
       })
-      if (!response.ok) throw new Error('Failed to stop runner')
-      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['autonomous-status'] })
+    },
+  })
+}
+
+function useRegisterAgent() {
+  const queryClient = useQueryClient()
+  const { authenticatedFetch } = useAuthenticatedFetch()
+  return useMutation({
+    mutationFn: async (request: RegisterAgentRequest) => {
+      return authenticatedFetch(`/api/v1/autonomous/agents`, {
+        method: 'POST',
+        body: request,
+        requireAuth: true,
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autonomous-status'] })
@@ -71,16 +97,13 @@ function useStopRunner() {
 
 function useUnregisterAgent() {
   const queryClient = useQueryClient()
+  const { authenticatedFetch } = useAuthenticatedFetch()
   return useMutation({
     mutationFn: async (agentId: string) => {
-      const response = await fetch(
-        `${API_URL}/api/v1/autonomous/agents/${agentId}`,
-        {
-          method: 'DELETE',
-        },
-      )
-      if (!response.ok) throw new Error('Failed to unregister agent')
-      return response.json()
+      return authenticatedFetch(`/api/v1/autonomous/agents/${agentId}`, {
+        method: 'DELETE',
+        requireAuth: true,
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autonomous-status'] })
@@ -88,68 +111,81 @@ function useUnregisterAgent() {
   })
 }
 
+function formatTime(timestamp: number): string {
+  if (!timestamp) return 'Never'
+  return new Date(timestamp).toLocaleTimeString()
+}
+
+function formatActivityTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function summarizeJsonValue(value: JsonValue): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return value.slice(0, 60)
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value)
+  const json = JSON.stringify(value)
+  return json.length > 60 ? `${json.slice(0, 60)}…` : json
+}
+
+function formatJsonValue(value: JsonValue): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
+}
+
 export default function AutonomousPage() {
   const navigate = useNavigate()
   const { data: status, isLoading, error } = useAutonomousStatus()
+  const { data: characters } = useCharacters()
   const startRunner = useStartRunner()
   const stopRunner = useStopRunner()
+  const registerAgent = useRegisterAgent()
   const unregisterAgent = useUnregisterAgent()
+
+  const [showRegister, setShowRegister] = useState(false)
+  const [selectedCharacterId, setSelectedCharacterId] = useState('')
+  const [tickInterval, setTickInterval] = useState(60_000)
+
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
+  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(
+    new Set(),
+  )
 
   const toggleExpanded = (agentId: string) => {
     setExpandedAgents((prev) => {
       const next = new Set(prev)
-      if (next.has(agentId)) {
-        next.delete(agentId)
-      } else {
-        next.add(agentId)
-      }
+      if (next.has(agentId)) next.delete(agentId)
+      else next.add(agentId)
       return next
     })
   }
-
-  const formatTime = (timestamp: number) => {
-    if (!timestamp) return 'Never'
-    const date = new Date(timestamp)
-    return date.toLocaleTimeString()
-  }
-
-  const formatActivityTime = (timestamp: number) => {
-    const date = new Date(timestamp)
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
-
-  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set())
 
   const toggleActivityExpanded = (key: string) => {
     setExpandedActivities((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
 
-  const formatResult = (result: unknown): string => {
-    if (!result) return ''
-    if (typeof result === 'string') return result.slice(0, 60)
-    if (typeof result === 'object' && result !== null) {
-      const obj = result as Record<string, unknown>
-      if ('error' in obj) return String(obj.error).slice(0, 60)
-      if ('text' in obj) return String(obj.text).slice(0, 60)
-      if ('message' in obj) return String(obj.message).slice(0, 60)
-      return JSON.stringify(result).slice(0, 60)
-    }
-    return String(result).slice(0, 60)
-  }
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedCharacterId) return
 
-  const getFullResult = (result: unknown): string => {
-    if (!result) return ''
-    if (typeof result === 'string') return result
-    return JSON.stringify(result, null, 2)
+    await registerAgent.mutateAsync({
+      characterId: selectedCharacterId,
+      tickIntervalMs: tickInterval,
+    })
+
+    setShowRegister(false)
+    setSelectedCharacterId('')
   }
 
   if (isLoading) {
@@ -167,7 +203,6 @@ export default function AutonomousPage() {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="card-static p-8 text-center" role="alert">
-          <div className="text-5xl mb-4">⚠️</div>
           <h2
             className="text-xl font-bold mb-2"
             style={{ color: 'var(--color-error)' }}
@@ -182,7 +217,6 @@ export default function AutonomousPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1
@@ -226,7 +260,6 @@ export default function AutonomousPage() {
         </div>
       </header>
 
-      {/* Status Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="card-static p-5 text-center">
           <p
@@ -276,10 +309,8 @@ export default function AutonomousPage() {
         </div>
       </div>
 
-      {/* Not Enabled Message */}
       {!status?.enabled && (
         <div className="card-static p-8 text-center mb-8">
-          <div className="text-5xl mb-4">🔌</div>
           <h2
             className="text-xl font-bold mb-2"
             style={{ color: 'var(--text-primary)' }}
@@ -299,7 +330,6 @@ export default function AutonomousPage() {
         </div>
       )}
 
-      {/* Agents Section */}
       {status?.enabled && (
         <>
           <div className="flex items-center justify-between mb-6">
@@ -309,20 +339,122 @@ export default function AutonomousPage() {
             >
               Registered Agents
             </h2>
-            <Link to="/agents/new" className="btn-primary btn-sm">
-              Deploy Agent
-            </Link>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => setShowRegister((v) => !v)}
+              >
+                {showRegister ? 'Close' : 'Register existing'}
+              </button>
+              <Link to="/agents/new" className="btn-primary btn-sm">
+                Deploy Agent
+              </Link>
+            </div>
           </div>
 
-          {/* Agent List */}
+          {showRegister && (
+            <div className="card-static p-6 mb-6 animate-slide-up">
+              <h3
+                className="text-lg font-bold mb-4 font-display"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Register New Agent
+              </h3>
+
+              <form onSubmit={handleRegister} className="space-y-5">
+                <div>
+                  <label
+                    htmlFor="agent-select"
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Character
+                  </label>
+                  <select
+                    id="agent-select"
+                    value={selectedCharacterId}
+                    onChange={(e) => setSelectedCharacterId(e.target.value)}
+                    className="input max-w-md"
+                    required
+                  >
+                    <option value="">Select a character...</option>
+                    {characters?.map((character) => (
+                      <option key={character.id} value={character.id}>
+                        {character.name} ({character.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="tick-interval"
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Tick Interval
+                  </label>
+                  <select
+                    id="tick-interval"
+                    value={tickInterval}
+                    onChange={(e) => setTickInterval(Number(e.target.value))}
+                    className="input max-w-xs"
+                  >
+                    <option value={60_000}>1 minute</option>
+                    <option value={120_000}>2 minutes</option>
+                    <option value={300_000}>5 minutes</option>
+                    <option value={600_000}>10 minutes</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRegister(false)}
+                    className="btn-ghost"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!selectedCharacterId || registerAgent.isPending}
+                    className="btn-primary"
+                  >
+                    {registerAgent.isPending ? (
+                      <LoadingSpinner size="sm" />
+                    ) : (
+                      'Register'
+                    )}
+                  </button>
+                </div>
+
+                {registerAgent.isError && (
+                  <div
+                    className="p-3 rounded-lg"
+                    style={{ backgroundColor: 'rgba(244, 63, 94, 0.1)' }}
+                    role="alert"
+                  >
+                    <p
+                      className="text-sm"
+                      style={{ color: 'var(--color-error)' }}
+                    >
+                      {registerAgent.error.message}
+                    </p>
+                  </div>
+                )}
+              </form>
+            </div>
+          )}
+
           {status?.agents && status.agents.length > 0 ? (
             <div className="space-y-4">
               {status.agents.map((agent) => {
                 const isExpanded = expandedAgents.has(agent.id)
-                const hasActivity = agent.recentActivity && agent.recentActivity.length > 0
+                const hasActivity = agent.recentActivity.length > 0
+
                 return (
                   <div key={agent.id} className="card-static overflow-hidden">
-                    {/* Agent Header */}
                     <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div
                         className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity"
@@ -356,6 +488,7 @@ export default function AutonomousPage() {
                           </p>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-6">
                         <div className="text-center">
                           <p
@@ -391,7 +524,9 @@ export default function AutonomousPage() {
                           className="btn-ghost btn-sm"
                           style={{ color: 'var(--text-secondary)' }}
                           disabled={!hasActivity}
-                          title={hasActivity ? 'Show activity' : 'No activity yet'}
+                          title={
+                            hasActivity ? 'Show activity' : 'No activity yet'
+                          }
                         >
                           {isExpanded ? '▼' : '▶'} Activity
                         </button>
@@ -407,11 +542,13 @@ export default function AutonomousPage() {
                       </div>
                     </div>
 
-                    {/* Activity Timeline */}
                     {isExpanded && hasActivity && (
                       <div
                         className="border-t px-5 py-4"
-                        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+                        style={{
+                          borderColor: 'var(--border-primary)',
+                          backgroundColor: 'var(--bg-secondary)',
+                        }}
                       >
                         <p
                           className="text-xs font-medium mb-3"
@@ -420,68 +557,92 @@ export default function AutonomousPage() {
                           Recent Activity (last 10)
                         </p>
                         <div className="space-y-1">
-                          {[...agent.recentActivity].reverse().map((activity, idx) => {
-                            const activityKey = `${agent.id}-${activity.timestamp}-${idx}`
-                            const isActivityExpanded = expandedActivities.has(activityKey)
-                            return (
-                              <div key={activityKey}>
-                                <button
-                                  type="button"
-                                  onClick={() => activity.result && toggleActivityExpanded(activityKey)}
-                                  className="w-full flex items-start gap-3 text-sm text-left py-1 px-2 rounded hover:bg-black/10"
-                                  style={{ cursor: activity.result ? 'pointer' : 'default' }}
-                                >
-                                  <span
-                                    className="flex-shrink-0 w-5 text-center"
-                                    style={{ color: activity.success ? 'var(--color-success)' : 'var(--color-error)' }}
-                                  >
-                                    {activity.success ? '✓' : '✗'}
-                                  </span>
-                                  <span
-                                    className="flex-shrink-0 font-mono text-xs"
-                                    style={{ color: 'var(--text-tertiary)' }}
-                                  >
-                                    {formatActivityTime(activity.timestamp)}
-                                  </span>
-                                  <span
-                                    className="font-medium flex-shrink-0"
-                                    style={{ color: 'var(--text-primary)' }}
-                                  >
-                                    {activity.action}
-                                  </span>
-                                  {activity.result && !isActivityExpanded && (
-                                    <span
-                                      className="truncate"
-                                      style={{ color: activity.success ? 'var(--text-secondary)' : 'var(--color-error)' }}
-                                    >
-                                      {formatResult(activity.result)}...
-                                    </span>
-                                  )}
-                                  {activity.result && (
-                                    <span
-                                      className="flex-shrink-0 ml-auto"
-                                      style={{ color: 'var(--text-tertiary)' }}
-                                    >
-                                      {isActivityExpanded ? '▼' : '▶'}
-                                    </span>
-                                  )}
-                                </button>
-                                {isActivityExpanded && activity.result && (
-                                  <pre
-                                    className="mt-1 ml-8 p-3 rounded text-xs overflow-x-auto"
+                          {[...agent.recentActivity]
+                            .reverse()
+                            .map((activity, idx) => {
+                              const activityKey = `${agent.id}-${activity.timestamp}-${idx}`
+                              const expanded =
+                                expandedActivities.has(activityKey)
+                              const hasResult = activity.result !== undefined
+                              const result = activity.result
+                              return (
+                                <div key={activityKey}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (hasResult)
+                                        toggleActivityExpanded(activityKey)
+                                    }}
+                                    className="w-full flex items-start gap-3 text-sm text-left py-1 px-2 rounded hover:bg-black/10"
                                     style={{
-                                      backgroundColor: 'var(--bg-primary)',
-                                      color: 'var(--text-secondary)',
-                                      maxHeight: '200px',
-                                      overflowY: 'auto',
+                                      cursor: hasResult ? 'pointer' : 'default',
                                     }}
                                   >
-                                    {getFullResult(activity.result)}
-                                  </pre>
-                                )}
-                              </div>
-                            )
-                          })}
+                                    <span
+                                      className="flex-shrink-0 w-5 text-center"
+                                      style={{
+                                        color: activity.success
+                                          ? 'var(--color-success)'
+                                          : 'var(--color-error)',
+                                      }}
+                                    >
+                                      {activity.success ? '✓' : '✗'}
+                                    </span>
+                                    <span
+                                      className="flex-shrink-0 font-mono text-xs"
+                                      style={{ color: 'var(--text-tertiary)' }}
+                                    >
+                                      {formatActivityTime(activity.timestamp)}
+                                    </span>
+                                    <span
+                                      className="font-medium flex-shrink-0"
+                                      style={{ color: 'var(--text-primary)' }}
+                                    >
+                                      {activity.action}
+                                    </span>
+                                    {hasResult && !expanded && (
+                                      <span
+                                        className="truncate"
+                                        style={{
+                                          color: activity.success
+                                            ? 'var(--text-secondary)'
+                                            : 'var(--color-error)',
+                                        }}
+                                      >
+                                        {result !== undefined
+                                          ? summarizeJsonValue(result)
+                                          : ''}
+                                      </span>
+                                    )}
+                                    {hasResult && (
+                                      <span
+                                        className="flex-shrink-0 ml-auto"
+                                        style={{
+                                          color: 'var(--text-tertiary)',
+                                        }}
+                                      >
+                                        {expanded ? '▼' : '▶'}
+                                      </span>
+                                    )}
+                                  </button>
+                                  {expanded && hasResult && (
+                                    <pre
+                                      className="mt-1 ml-8 p-3 rounded text-xs overflow-x-auto"
+                                      style={{
+                                        backgroundColor: 'var(--bg-primary)',
+                                        color: 'var(--text-secondary)',
+                                        maxHeight: '200px',
+                                        overflowY: 'auto',
+                                      }}
+                                    >
+                                      {result !== undefined
+                                        ? formatJsonValue(result)
+                                        : ''}
+                                    </pre>
+                                  )}
+                                </div>
+                              )
+                            })}
                         </div>
                       </div>
                     )}

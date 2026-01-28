@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { getDWSUrl, getLocalhostHost } from '@jejunetwork/config'
 import { Command } from 'commander'
 import type { Address } from 'viem'
+import { z } from 'zod'
 import { logger } from '../lib/logger'
 import type { AppManifest, NetworkType } from '../types'
 import { requireLogin } from './login'
@@ -77,19 +78,28 @@ async function setSecret(
   value: string,
   scope: string,
   network: NetworkType,
-  authToken: string,
-  address: Address,
+  authToken: string | null,
+  address: Address | null,
+  serviceId?: string,
 ): Promise<{ secretId: string }> {
   const dwsUrl = getDWSUrlForNetwork(network)
 
   // Use the KMS vault endpoint to store secrets securely
-  const response = await fetch(`${dwsUrl}/vault/secrets`, {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`
+  }
+  if (serviceId) {
+    headers['x-service-id'] = serviceId
+  } else if (address) {
+    headers['x-jeju-address'] = address
+  }
+
+  const response = await fetch(`${dwsUrl}/kms/vault/secrets`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${authToken}`,
-      'x-jeju-address': address,
-    },
+    headers,
     body: JSON.stringify({
       // Secret name includes app scope for namespacing
       name: `${appName}:${key}`,
@@ -107,8 +117,17 @@ async function setSecret(
     throw new Error(`Failed to set secret: ${error}`)
   }
 
-  const result = (await response.json()) as { secretId: string }
-  return result
+  const result = z
+    .object({
+      id: z.string().optional(),
+      secretId: z.string().optional(),
+    })
+    .parse(await response.json())
+  const secretId = result.secretId ?? result.id
+  if (!secretId) {
+    throw new Error('Failed to set secret: missing secret id')
+  }
+  return { secretId }
 }
 
 /**
@@ -123,7 +142,7 @@ async function listSecrets(
   const dwsUrl = getDWSUrlForNetwork(network)
 
   // Use vault endpoint to list secrets
-  const response = await fetch(`${dwsUrl}/vault/secrets`, {
+  const response = await fetch(`${dwsUrl}/kms/vault/secrets`, {
     headers: {
       Authorization: `Bearer ${authToken}`,
       'x-jeju-address': address,
@@ -185,7 +204,7 @@ async function deleteSecret(
   // Delete from vault using the namespaced name
   const secretName = `${appName}:${key}`
   const response = await fetch(
-    `${dwsUrl}/vault/secrets/${encodeURIComponent(secretName)}`,
+    `${dwsUrl}/kms/vault/secrets/${encodeURIComponent(secretName)}`,
     {
       method: 'DELETE',
       headers: {
@@ -497,6 +516,7 @@ secretCommand
   .description('Push local .env file to secrets')
   .option('--app <name>', 'App name (default: from manifest)')
   .option('-i, --input <file>', 'Input file', '.env.local')
+  .option('--service-id <id>', 'Store secrets under service identity')
   .option(
     '--scope <scope>',
     'Secret scope: production, preview, development, all',
@@ -505,6 +525,10 @@ secretCommand
   .action(async (options) => {
     const credentials = requireLogin()
     const network = credentials.network as NetworkType
+    const serviceId = typeof options.serviceId === 'string'
+      ? options.serviceId.trim()
+      : ''
+    const useServiceId = serviceId.length > 0
     const cwd = process.cwd()
 
     // Get app name
@@ -557,8 +581,9 @@ secretCommand
         value,
         options.scope,
         network,
-        credentials.authToken,
-        credentials.address as Address,
+        useServiceId ? null : credentials.authToken,
+        useServiceId ? null : (credentials.address as Address),
+        useServiceId ? serviceId : undefined,
       )
 
       secretIds.push(`${key}:${result.secretId}`)

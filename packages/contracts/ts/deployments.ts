@@ -6,9 +6,6 @@
  * Missing files are handled gracefully - they return empty objects which Zod schemas accept.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { Address } from 'viem'
 import {
   type BazaarMarketplaceDeployment,
@@ -32,10 +29,13 @@ import {
 import type { ChainId, NetworkName } from './types'
 import { CHAIN_IDS, isValidAddress } from './types'
 
-const DEPLOYMENTS_DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../deployments',
-)
+const isBrowserEnv = typeof window !== 'undefined'
+const deploymentsUrl = new URL('../deployments/', import.meta.url)
+const deploymentsDir =
+  deploymentsUrl.protocol === 'file:'
+    ? deploymentsUrl.pathname
+    : deploymentsUrl.toString()
+const fsModule = isBrowserEnv ? null : await import('node:fs')
 
 /**
  * Union type of all possible deployment data structures.
@@ -58,12 +58,13 @@ type DeploymentData =
  * returns unknown, so we validate with Zod schemas immediately after parsing.
  */
 function loadDeployment(filename: string): DeploymentData {
-  const filepath = join(DEPLOYMENTS_DIR, filename)
-  if (!existsSync(filepath)) {
+  if (fsModule === null) return {}
+  const filepath = `${deploymentsDir}${filename}`
+  if (!fsModule.existsSync(filepath)) {
     return {}
   }
   try {
-    const parsed = JSON.parse(readFileSync(filepath, 'utf-8'))
+    const parsed = JSON.parse(fsModule.readFileSync(filepath, 'utf-8'))
     return parsed as DeploymentData
   } catch {
     return {}

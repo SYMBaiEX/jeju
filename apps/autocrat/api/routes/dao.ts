@@ -2,28 +2,26 @@ import { getChainId } from '@jejunetwork/config'
 import { ZERO_ADDRESS } from '@jejunetwork/types'
 import { Elysia, t } from 'elysia'
 import { type Address, parseEther } from 'viem'
-import { createDAOService, type DAOService } from '../dao-service'
+import { type DAOService, getOrCreateDAOService } from '../dao-service'
 import { getProposalAssistant } from '../proposal-assistant'
 import { autocratConfig, blockchain, config } from '../shared-state'
 
 const ZERO_ADDR = ZERO_ADDRESS
 
-let daoService: DAOService | null = null
+async function getService(): Promise<DAOService> {
+  if (config.contracts.daoRegistry === ZERO_ADDR) {
+    throw new Error('DAO Registry not deployed')
+  }
 
-function getService(): DAOService {
-  if (!daoService && config.contracts.daoRegistry !== ZERO_ADDR) {
-    daoService = createDAOService({
+  return getOrCreateDAOService(
+    {
       rpcUrl: config.rpcUrl,
       chainId: getChainId(),
       daoRegistryAddress: config.contracts.daoRegistry,
       daoFundingAddress: config.contracts.daoFunding,
-      privateKey: autocratConfig.operatorKey ?? autocratConfig.privateKey,
-    })
-  }
-  if (!daoService) {
-    throw new Error('DAO Registry not deployed')
-  }
-  return daoService
+    },
+    autocratConfig.operatorKey ?? autocratConfig.privateKey,
+  )
 }
 
 export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
@@ -32,7 +30,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/list',
     async ({ set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const daoIds = await service.getAllDAOs()
         const daos = await Promise.all(daoIds.map((id) => service.getDAO(id)))
         return { daos }
@@ -56,7 +54,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/active',
     async ({ set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const daoIds = await service.getActiveDAOs()
         const daos = await Promise.all(
           daoIds.map((id) => service.getDAOFull(id)),
@@ -78,8 +76,8 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .post(
     '/',
     async ({ body }) => {
-      const service = getService()
-      const txHash = await service.createDAO({
+      const service = await getService()
+      const { hash: txHash, daoId } = await service.createDAO({
         name: body.name,
         displayName: body.displayName,
         description: body.description,
@@ -107,8 +105,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
           quorumBps: body.governance.quorumBps,
         },
       })
-      // Return the created DAO details
-      const dao = await service.getDAOFull(body.name)
+      const dao = await service.getDAOFull(daoId)
       return { ...dao, txHash }
     },
     {
@@ -155,7 +152,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId',
     async ({ params, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const exists = await service.daoExists(params.daoId)
         if (!exists) {
           set.status = 404
@@ -182,7 +179,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId',
     async ({ params, body, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const exists = await service.daoExists(params.daoId)
         if (!exists) {
           set.status = 404
@@ -242,7 +239,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId/governance',
     async ({ params, body, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const exists = await service.daoExists(params.daoId)
         if (!exists) {
           set.status = 404
@@ -283,7 +280,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .get(
     '/:daoId/persona',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       return service.getDirectorPersona(params.daoId)
     },
     {
@@ -296,7 +293,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .get(
     '/:daoId/board',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       const members = await service.getBoardMembers(params.daoId)
       return { members }
     },
@@ -311,7 +308,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId/agents',
     async ({ params, body, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const exists = await service.daoExists(params.daoId)
         if (!exists) {
           set.status = 404
@@ -356,7 +353,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId/agents/:agentId',
     async ({ params, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const members = await service.getBoardMembers(params.daoId)
         const member = members.find(
           (m) => m.agentId.toString() === params.agentId,
@@ -391,7 +388,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
     '/:daoId/agents/:agentId',
     async ({ params, body, set }) => {
       try {
-        const service = getService()
+        const service = await getService()
         const exists = await service.daoExists(params.daoId)
         if (!exists) {
           set.status = 404
@@ -471,7 +468,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .delete(
     '/:daoId/agents/:agentId',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       const exists = await service.daoExists(params.daoId)
       if (!exists) throw new Error('DAO not found')
 
@@ -550,7 +547,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .post(
     '/:daoId/proposals',
     async ({ params, body }) => {
-      const service = getService()
+      const service = await getService()
       const exists = await service.daoExists(params.daoId)
       if (!exists) throw new Error('DAO not found')
 
@@ -614,7 +611,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .get(
     '/:daoId/treasury',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       const exists = await service.daoExists(params.daoId)
       if (!exists) throw new Error('DAO not found')
 
@@ -647,7 +644,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .get(
     '/:daoId/packages',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       const packages = await service.getLinkedPackages(params.daoId)
       return { packages }
     },
@@ -661,7 +658,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
   .get(
     '/:daoId/repos',
     async ({ params }) => {
-      const service = getService()
+      const service = await getService()
       const repos = await service.getLinkedRepos(params.daoId)
       return { repos }
     },

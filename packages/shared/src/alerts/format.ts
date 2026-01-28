@@ -1,5 +1,13 @@
-import type { Alert, AlertSeverity, AlertCategory } from './types'
+import { z } from 'zod'
+import type { Alert, AlertCategory, AlertSeverity } from './types'
 import { SEVERITY_CONFIG } from './types'
+
+const alertMetadataSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+)
+
+type AlertMetadata = z.infer<typeof alertMetadataSchema>
 
 /**
  * Generate a simple unique ID for alerts
@@ -30,28 +38,47 @@ export function formatAlert(alert: Alert): string {
  * Parse an alert from a message string.
  */
 export function parseAlert(text: string): Partial<Alert> | null {
-  const headerPattern = /\[ALERT \| severity=(P[0-3]) \| id=(\S+) \| source=(\S+) \| ts=(\d+)\]/
+  const headerPattern =
+    /\[ALERT \| severity=(P[0-3]) \| id=(\S+) \| source=(\S+) \| ts=(\d+)\]/
   const match = text.match(headerPattern)
 
   if (!match) return null
 
-  const [, severity, id, source, ts] = match
+  const severity = match[1]
+  const id = match[2]
+  const source = match[3]
+  const ts = match[4]
+
+  if (
+    severity === undefined ||
+    id === undefined ||
+    source === undefined ||
+    ts === undefined
+  ) {
+    return null
+  }
 
   const jsonPattern = /```json\n(\{[^`]+\})\n```/
   const jsonMatch = text.match(jsonPattern)
 
-  let metadata: Record<string, unknown> = {}
-  if (jsonMatch) {
+  let metadata: AlertMetadata = {}
+  const jsonText = jsonMatch ? jsonMatch[1] : undefined
+  if (jsonText !== undefined) {
     try {
-      metadata = JSON.parse(jsonMatch[1])
-    } catch { /* ignore */ }
+      const parsed: unknown = JSON.parse(jsonText)
+      const parsedMetadata = alertMetadataSchema.safeParse(parsed)
+      if (parsedMetadata.success) {
+        metadata = parsedMetadata.data
+      }
+    } catch {}
   }
 
   const headerEnd = text.indexOf(']') + 1
   const jsonStart = text.indexOf('```json')
-  const message = jsonStart > 0
-    ? text.slice(headerEnd, jsonStart).trim()
-    : text.slice(headerEnd).trim()
+  const message =
+    jsonStart > 0
+      ? text.slice(headerEnd, jsonStart).trim()
+      : text.slice(headerEnd).trim()
 
   return {
     id,
@@ -66,14 +93,19 @@ export function parseAlert(text: string): Partial<Alert> | null {
 /**
  * Parse ACK from a message.
  */
-export function parseAck(text: string): { alertId: string; note?: string } | null {
+export function parseAck(
+  text: string,
+): { alertId: string; note?: string } | null {
   const pattern = /\[ACK\s+(\S+)(?:\s*\|\s*note=([^\]]+))?\]/i
   const match = text.match(pattern)
 
   if (!match) return null
 
+  const alertId = match[1]
+  if (alertId === undefined) return null
+
   return {
-    alertId: match[1],
+    alertId,
     note: match[2]?.trim(),
   }
 }

@@ -19,7 +19,14 @@ async function compileTailwindCSS(): Promise<void> {
   const start = Date.now()
 
   const proc = Bun.spawn(
-    ['bunx', 'tailwindcss', '-i', './web/globals.css', '-o', './dist/dev/globals.css'],
+    [
+      'bunx',
+      'tailwindcss',
+      '-i',
+      './web/globals.css',
+      '-o',
+      './dist/dev/globals.css',
+    ],
     { stdout: 'pipe', stderr: 'pipe', cwd: process.cwd() },
   )
 
@@ -48,9 +55,7 @@ async function buildFrontend(): Promise<void> {
     splitting: false,
     minify: false,
     sourcemap: 'inline',
-    external: [
-      ...DEFAULT_BROWSER_EXTERNALS,
-    ],
+    external: [...DEFAULT_BROWSER_EXTERNALS],
     define: {
       'process.env.NODE_ENV': JSON.stringify('development'),
       'process.env.PUBLIC_API_URL': JSON.stringify(
@@ -220,7 +225,9 @@ async function buildProduction(): Promise<void> {
     return
   }
 
-  console.log(`[Crucible] Production build completed in ${Date.now() - start}ms`)
+  console.log(
+    `[Crucible] Production build completed in ${Date.now() - start}ms`,
+  )
 }
 
 function generateDevHtml(): string {
@@ -256,6 +263,36 @@ async function startServer(): Promise<void> {
   await mkdir('./dist/dev', { recursive: true })
   await compileTailwindCSS()
   await buildFrontend()
+
+  // Start API server alongside the frontend.
+  // This replaces `concurrently` (which breaks under Node 22 + Bun deps) and
+  // ensures the API is available at PUBLIC_API_URL during E2E.
+  const apiEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) apiEnv[key] = value
+  }
+  apiEnv.API_PORT = String(API_PORT)
+  apiEnv.AUTONOMOUS_ENABLED =
+    process.env.AUTONOMOUS_ENABLED === 'false' ? 'false' : 'true'
+
+  const apiProc = Bun.spawn(['bun', '--watch', 'api/server.ts'], {
+    cwd: process.cwd(),
+    stdout: 'inherit',
+    stderr: 'inherit',
+    env: apiEnv,
+  })
+  apiProc.exited.then((code) => {
+    if (code !== 0) {
+      console.error(`[Crucible] API server exited with code ${code}`)
+    }
+  })
+
+  const shutdown = () => {
+    apiProc.kill()
+    process.exit(0)
+  }
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
 
   Bun.serve({
     port: FRONTEND_PORT,
@@ -297,7 +334,10 @@ async function startServer(): Promise<void> {
         const cssFile = Bun.file('./dist/dev/globals.css')
         if (await cssFile.exists()) {
           return new Response(cssFile, {
-            headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-cache' },
+            headers: {
+              'Content-Type': 'text/css',
+              'Cache-Control': 'no-cache',
+            },
           })
         }
       }
@@ -316,6 +356,7 @@ async function startServer(): Promise<void> {
   })
 
   console.log(`[Crucible] Frontend: http://localhost:${FRONTEND_PORT}`)
+  console.log(`[Crucible] API:      http://localhost:${API_PORT}`)
 
   // Watch for changes
   for (const dir of ['./web']) {

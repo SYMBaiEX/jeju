@@ -21,8 +21,12 @@ async function connectAndNavigateToBridge(
   metamask: MetaMask,
 ) {
   await page.goto(GATEWAY_URL)
-  await page.locator('button:has-text("Connect")').first().click()
+  await page.getByRole('button', { name: /sign in/i }).first().click()
   await page.waitForTimeout(1000)
+  const walletOption = page.getByRole('button', { name: /connect wallet/i })
+  if (await walletOption.isVisible().catch(() => false)) {
+    await walletOption.click()
+  }
   await metamask.connectToDapp()
   await page.getByRole('button', { name: /Bridge from Ethereum/i }).click()
   await page.waitForTimeout(1000)

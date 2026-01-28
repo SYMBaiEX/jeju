@@ -1,3 +1,4 @@
+import { AuthCallback } from '@jejunetwork/auth/react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import AgentsPage from './pages/Agents'
@@ -42,6 +43,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* Compute */}
         <Route path="/compute/containers" element={<ContainersPage />} />

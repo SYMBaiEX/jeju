@@ -428,7 +428,7 @@ export class TestOrchestrator {
       WS_URL: services.rpc.ws,
       CHAIN_ID:
         network === 'localnet'
-          ? '31337'
+          ? (this.localnetOrchestrator?.getEnvVars().CHAIN_ID ?? '31337')
           : network === 'testnet'
             ? '420690'
             : '420691',

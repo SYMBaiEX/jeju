@@ -39,7 +39,11 @@ async function isServerRunning(): Promise<boolean> {
 async function chatWithAgent(
   characterId: string,
   text: string,
-): Promise<{ text: string; action?: string; actions?: Array<{ name: string }> }> {
+): Promise<{
+  text: string
+  action?: string
+  actions?: Array<{ name: string }>
+}> {
   const response = await fetch(`${CRUCIBLE_URL}/api/v1/chat/${characterId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -94,7 +98,9 @@ describe('Security Analyst Agent', () => {
     }
 
     expect(content.length).toBeGreaterThan(1000) // Contract should be substantial
-    console.log('✅ Baseline verified - AgentVault.sol is accessible at expected URL')
+    console.log(
+      '✅ Baseline verified - AgentVault.sol is accessible at expected URL',
+    )
   })
 
   test('security-analyst character exists', async () => {
@@ -115,125 +121,120 @@ describe('Security Analyst Agent', () => {
     expect(data.characters).toBeDefined()
   })
 
-  test(
-    'can audit contract via AUDIT_CONTRACT action',
-    async () => {
-      if (!(await isServerRunning())) return
+  test('can audit contract via AUDIT_CONTRACT action', async () => {
+    if (!(await isServerRunning())) return
 
-      // Check if security-analyst exists
-      const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
-      const charsData = await charsResponse.json()
-      const characterIds = charsData.characters?.map((c: { id: string }) => c.id) ?? []
+    // Check if security-analyst exists
+    const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
+    const charsData = await charsResponse.json()
+    const characterIds =
+      charsData.characters?.map((c: { id: string }) => c.id) ?? []
 
-      if (!characterIds.includes('security-analyst')) {
-        console.log('⚠️  security-analyst not available, skipping')
-        return
-      }
+    if (!characterIds.includes('security-analyst')) {
+      console.log('⚠️  security-analyst not available, skipping')
+      return
+    }
 
-      const response = await chatWithAgent(
-        'security-analyst',
-        `Audit the contract at ${TEST_CONTRACT_URL}`,
-      )
+    const response = await chatWithAgent(
+      'security-analyst',
+      `Audit the contract at ${TEST_CONTRACT_URL}`,
+    )
 
-      console.log('Response length:', response.text.length)
-      console.log('Response preview:', response.text.slice(0, 800))
+    console.log('Response length:', response.text.length)
+    console.log('Response preview:', response.text.slice(0, 800))
 
-      // Verify response is substantial
-      expect(response.text).toBeDefined()
-      expect(response.text.length).toBeGreaterThan(200)
+    // Verify response is substantial
+    expect(response.text).toBeDefined()
+    expect(response.text.length).toBeGreaterThan(200)
 
-      // PROOF: Verify audit report structure and contract name
-      // The audit should produce a report mentioning the contract name
-      const hasContractName = response.text.includes(AGENTVAULT_MARKERS.contractName)
-      const hasReportStructure =
-        response.text.includes('Security Audit') ||
-        response.text.includes('Findings') ||
-        response.text.includes('Analyzing')
+    // PROOF: Verify audit report structure and contract name
+    // The audit should produce a report mentioning the contract name
+    const hasContractName = response.text.includes(
+      AGENTVAULT_MARKERS.contractName,
+    )
+    const hasReportStructure =
+      response.text.includes('Security Audit') ||
+      response.text.includes('Findings') ||
+      response.text.includes('Analyzing')
 
-      expect(hasContractName || hasReportStructure).toBe(true)
+    expect(hasContractName || hasReportStructure).toBe(true)
 
-      console.log('✅ Contract audit verified - contains report or contract reference')
-    },
-    180000, // 180s timeout for full audit
-  )
+    console.log(
+      '✅ Contract audit verified - contains report or contract reference',
+    )
+  }, 180000) // 180s timeout for full audit
 
-  test(
-    'can analyze contract for vulnerabilities',
-    async () => {
-      if (!(await isServerRunning())) return
+  test('can analyze contract for vulnerabilities', async () => {
+    if (!(await isServerRunning())) return
 
-      const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
-      const charsData = await charsResponse.json()
-      const characterIds = charsData.characters?.map((c: { id: string }) => c.id) ?? []
+    const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
+    const charsData = await charsResponse.json()
+    const characterIds =
+      charsData.characters?.map((c: { id: string }) => c.id) ?? []
 
-      if (!characterIds.includes('security-analyst')) {
-        console.log('⚠️  security-analyst not available, skipping')
-        return
-      }
+    if (!characterIds.includes('security-analyst')) {
+      console.log('⚠️  security-analyst not available, skipping')
+      return
+    }
 
-      const response = await chatWithAgent(
-        'security-analyst',
-        `Analyze ${TEST_CONTRACT_URL} for security vulnerabilities. Focus on reentrancy, access control, and common DeFi issues.`,
-      )
+    const response = await chatWithAgent(
+      'security-analyst',
+      `Analyze ${TEST_CONTRACT_URL} for security vulnerabilities. Focus on reentrancy, access control, and common DeFi issues.`,
+    )
 
-      console.log('Analysis preview:', response.text.slice(0, 1000))
+    console.log('Analysis preview:', response.text.slice(0, 1000))
 
-      // Verify response is substantive
-      expect(response.text).toBeDefined()
-      expect(response.text.length).toBeGreaterThan(200)
+    // Verify response is substantive
+    expect(response.text).toBeDefined()
+    expect(response.text.length).toBeGreaterThan(200)
 
-      // Check if response mentions security concepts
-      const hasSecurityAnalysis =
-        response.text.toLowerCase().includes('reentrancy') ||
-        response.text.toLowerCase().includes('access') ||
-        response.text.toLowerCase().includes('security') ||
-        response.text.toLowerCase().includes('vulnerability') ||
-        response.text.toLowerCase().includes('risk') ||
-        response.text.toLowerCase().includes('finding')
+    // Check if response mentions security concepts
+    const hasSecurityAnalysis =
+      response.text.toLowerCase().includes('reentrancy') ||
+      response.text.toLowerCase().includes('access') ||
+      response.text.toLowerCase().includes('security') ||
+      response.text.toLowerCase().includes('vulnerability') ||
+      response.text.toLowerCase().includes('risk') ||
+      response.text.toLowerCase().includes('finding')
 
-      expect(hasSecurityAnalysis).toBe(true)
-    },
-    120000, // 120s timeout for analysis
-  )
+    expect(hasSecurityAnalysis).toBe(true)
+  }, 120000) // 120s timeout for analysis
 
-  test(
-    'rejects non-GitHub URLs',
-    async () => {
-      if (!(await isServerRunning())) return
+  test('rejects non-GitHub URLs', async () => {
+    if (!(await isServerRunning())) return
 
-      const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
-      const charsData = await charsResponse.json()
-      const characterIds = charsData.characters?.map((c: { id: string }) => c.id) ?? []
+    const charsResponse = await fetch(`${CRUCIBLE_URL}/api/v1/chat/characters`)
+    const charsData = await charsResponse.json()
+    const characterIds =
+      charsData.characters?.map((c: { id: string }) => c.id) ?? []
 
-      if (!characterIds.includes('security-analyst')) {
-        console.log('⚠️  security-analyst not available, skipping')
-        return
-      }
+    if (!characterIds.includes('security-analyst')) {
+      console.log('⚠️  security-analyst not available, skipping')
+      return
+    }
 
-      const response = await chatWithAgent(
-        'security-analyst',
-        'Fetch contract from http://localhost:8080/evil.sol',
-      )
+    const response = await chatWithAgent(
+      'security-analyst',
+      'Fetch contract from http://localhost:8080/evil.sol',
+    )
 
-      console.log('Rejection test response:', response.text.slice(0, 500))
+    console.log('Rejection test response:', response.text.slice(0, 500))
 
-      // Should reject or warn about non-allowed domain
-      // Check both text and action result for rejection indicators
-      const textLower = response.text.toLowerCase()
-      const rejectsUnsafe =
-        textLower.includes('not allowed') ||
-        textLower.includes('only github') ||
-        textLower.includes('cannot fetch') ||
-        textLower.includes('security') ||
-        textLower.includes('internal') ||
-        textLower.includes('raw.githubusercontent') ||
-        textLower.includes('gist.githubusercontent') ||
-        textLower.includes('supported domain') ||
-        // Action may have failed with rejection message
-        (response.actions?.some((a) => !a.success) ?? false)
+    // Should reject or warn about non-allowed domain
+    // Check both text and action result for rejection indicators
+    const textLower = response.text.toLowerCase()
+    const rejectsUnsafe =
+      textLower.includes('not allowed') ||
+      textLower.includes('only github') ||
+      textLower.includes('cannot fetch') ||
+      textLower.includes('security') ||
+      textLower.includes('internal') ||
+      textLower.includes('raw.githubusercontent') ||
+      textLower.includes('gist.githubusercontent') ||
+      textLower.includes('supported domain') ||
+      // Action may have failed with rejection message
+      (response.actions?.some((a) => !a.success) ?? false)
 
-      expect(rejectsUnsafe).toBe(true)
-    },
-    60000,
-  )
+    expect(rejectsUnsafe).toBe(true)
+  }, 60000)
 })

@@ -9,6 +9,8 @@ const isRemote =
   process.env.JEJU_NETWORK === 'testnet' ||
   process.env.JEJU_NETWORK === 'mainnet'
 
+test.skip(isRemote, 'Skipping user flows on remote network')
+
 test.describe('Developer Onboarding Flow', () => {
   test.skip(isRemote, 'Skipping on remote network')
   test('new developer explores Factory', async ({ page }) => {

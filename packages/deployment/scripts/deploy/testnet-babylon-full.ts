@@ -17,7 +17,6 @@
  * Environment:
  *   NETWORK - Must be 'testnet'
  *   DEPLOYER_PRIVATE_KEY - Private key with ETH on Jeju testnet + Sepolia
- *   AWS_REGION - AWS region (default: us-east-1)
  *   IPFS_API_URL - IPFS API (default: uses DWS)
  */
 
@@ -407,17 +406,14 @@ class TestnetBabylonDeployer {
       )
     }
 
-    // Check required tools
-    const tools = ['forge', 'kubectl', 'aws', 'curl', 'jq']
+    // Check required tools (only forge and curl needed for permissionless deployment)
+    const tools = ['forge', 'curl']
     for (const tool of tools) {
       const result = execSync(`which ${tool} 2>/dev/null || echo "not found"`, {
         encoding: 'utf-8',
       }).trim()
       if (result === 'not found') {
-        this.log(
-          `Tool ${tool} not found - some features may be limited`,
-          'warn',
-        )
+        throw new Error(`Required tool ${tool} not found`)
       }
     }
 
@@ -434,23 +430,10 @@ class TestnetBabylonDeployer {
   }
 
   private async verifyInfrastructure(): Promise<void> {
-    this.log('Verifying AWS infrastructure...', 'info')
-
-    // Check if EKS cluster is accessible
-    const kubectlCheck = execSync(
-      'kubectl cluster-info 2>/dev/null || echo "not connected"',
-      { encoding: 'utf-8' },
-    ).trim()
-
-    if (kubectlCheck.includes('not connected')) {
-      this.log(
-        'EKS cluster not accessible - configure with: aws eks update-kubeconfig --name jeju-testnet --region us-east-1',
-        'warn',
-      )
-      this.log('Continuing with contract deployment only...', 'info')
-    } else {
-      this.log('EKS cluster accessible', 'success')
-    }
+    // Infrastructure is fully on-chain - no external dependencies
+    this.log('Verifying on-chain infrastructure...', 'info')
+    const blockNumber = await this.publicClient.getBlockNumber()
+    this.log(`Chain accessible at block ${blockNumber}`, 'success')
   }
 
   private async checkInfrastructure(): Promise<boolean> {

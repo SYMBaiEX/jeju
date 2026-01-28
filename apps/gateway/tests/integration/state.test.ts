@@ -95,8 +95,14 @@ describe('Gateway State Module', () => {
   })
 
   describe('Solver State', () => {
+    // Clean up any invalid test data from previous runs
+    beforeAll(async () => {
+      // Delete the old invalid solver address if it exists
+      await solverState.delete('0xsolver0000000000000000000000000000000001')
+    })
+
     const testSolver: Solver = {
-      address: '0xsolver0000000000000000000000000000000001' as `0x${string}`,
+      address: '0xabc1230000000000000000000000000000000001' as `0x${string}`,
       name: 'Test Solver',
       endpoint: 'http://test-solver.local/a2a',
       supportedChains: [1, 42161] as SupportedChainId[],

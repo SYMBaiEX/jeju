@@ -296,7 +296,7 @@ export default function JejuICOPage() {
             className="btn-primary w-full py-4 text-lg"
           >
             {!isConnected
-              ? 'Connect Wallet'
+              ? 'Sign In'
               : isPending
                 ? 'Confirming...'
                 : 'Contribute'}

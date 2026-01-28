@@ -4,7 +4,7 @@
  * Uses @jejunetwork/kms for all signing operations.
  */
 
-import { isProductionEnv } from '@jejunetwork/config'
+import { getCurrentNetwork, isProductionEnv } from '@jejunetwork/config'
 import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
 import {
   type Address,
@@ -25,11 +25,17 @@ import { privateKeyToAccount } from 'viem/accounts'
 //                     AUTOCRAT-SPECIFIC TYPES
 // ════════════════════════════════════════════════════════════════════════════
 
-export interface AutocratKMSConfig {
-  address: Address
-  fallbackKey?: Hex
-  forceProduction?: boolean
-}
+type AutocratKMSConfig =
+  | {
+      address: Address
+      fallbackKey?: Hex
+      forceProduction?: boolean
+    }
+  | {
+      serviceId: string
+      fallbackKey?: Hex
+      forceProduction?: boolean
+    }
 
 export interface KMSAccount {
   address: Address
@@ -53,10 +59,11 @@ export async function createKMSAccount(
   config: AutocratKMSConfig,
 ): Promise<KMSAccount> {
   const isProduction = isProductionEnv() || config.forceProduction
+  const serviceId = resolveServiceId(config)
 
   // Create KMS signer
   const signer = createKMSSigner({
-    serviceId: `autocrat-${config.address.toLowerCase()}`,
+    serviceId,
     allowLocalDev: !isProduction,
   })
 
@@ -163,13 +170,18 @@ function createLocalFallbackAccount(privateKey: Hex): KMSAccount {
 // ════════════════════════════════════════════════════════════════════════════
 
 export async function createKMSWalletClient<_TTransport extends Transport>(
-  configOrAddress: AutocratKMSConfig | { address: Address },
+  configOrAddress:
+    | AutocratKMSConfig
+    | { address: Address }
+    | { serviceId: string },
   chain?: Chain,
   rpcUrl?: string,
 ): Promise<{ client: WalletClient; account: KMSAccount }> {
   let kmsConfig: AutocratKMSConfig
 
   if ('address' in configOrAddress) {
+    kmsConfig = configOrAddress as AutocratKMSConfig
+  } else if ('serviceId' in configOrAddress) {
     kmsConfig = configOrAddress as AutocratKMSConfig
   } else {
     kmsConfig = configOrAddress
@@ -244,4 +256,15 @@ export function getOperatorConfig(): AutocratKMSConfig | null {
     fallbackKey: operatorKey as Hex,
     forceProduction: false,
   }
+}
+
+function resolveServiceId(config: AutocratKMSConfig): string {
+  if ('address' in config) {
+    return `autocrat-${config.address.toLowerCase()}`
+  }
+  if (config.serviceId.length > 0) {
+    return config.serviceId
+  }
+  const network = getCurrentNetwork()
+  return `autocrat-operator-${network}`
 }

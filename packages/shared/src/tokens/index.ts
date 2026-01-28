@@ -162,9 +162,8 @@ export function truncateToTokenLimitSync(
 }
 
 /**
- * Model-specific INPUT CONTEXT token limits
- *
- * Note: Output limits are separate from input limits on modern models.
+ * Model-specific INPUT CONTEXT token limits.
+ * Output limits are separate from input limits on modern models.
  */
 export const MODEL_TOKEN_LIMITS: Record<string, number> = {
   // OpenAI
@@ -293,12 +292,7 @@ export function budgetTokens(
  * GPT-5.x and reasoning models (o1, o3, o4) use max_completion_tokens
  * to separately track reasoning tokens vs output tokens.
  */
-const MODELS_REQUIRING_MAX_COMPLETION_TOKENS = [
-  'gpt-5',
-  'o1',
-  'o3',
-  'o4',
-]
+const MODELS_REQUIRING_MAX_COMPLETION_TOKENS = ['gpt-5', 'o1', 'o3', 'o4']
 
 /**
  * Check if a model requires max_completion_tokens parameter

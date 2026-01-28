@@ -4,112 +4,19 @@
  *
  * Deploys Crucible to DWS infrastructure:
  * 1. Builds frontend and API
- * 2. Uploads static assets to IPFS/CDN
+ * 2. Uploads static assets to IPFS with staticFiles mapping
  * 3. Registers backend worker with DWS
- * 4. Updates JNS contenthash
+ * 4. Verifies deployment is working
+ *
+ * Uses the standardized deployment utility from @jejunetwork/shared
  */
 
 import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
-import {
-  getCoreAppUrl,
-  getCurrentNetwork,
-  getL2RpcUrl,
-} from '@jejunetwork/config'
-import { keccak256 } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
-import { z } from 'zod'
+import { resolve } from 'node:path'
+import { getCurrentNetwork } from '@jejunetwork/config'
+import { deployAndVerify, getDWSUrlForNetwork } from '@jejunetwork/shared'
 
 const APP_DIR = resolve(import.meta.dir, '..')
-
-const IPFSUploadResponseSchema = z.object({
-  cid: z.string(),
-  size: z.number().optional(),
-})
-
-const DWSWorkerDeployResponseSchema = z.object({
-  functionId: z.string(),
-  name: z.string(),
-  codeCid: z.string(),
-  status: z.enum(['active', 'inactive', 'error']),
-})
-
-interface DeployConfig {
-  network: 'localnet' | 'testnet' | 'mainnet'
-  dwsUrl: string
-  rpcUrl: string
-  privateKey: `0x${string}`
-  cdnEnabled: boolean
-}
-
-// Well-known Anvil test key - ONLY for localnet
-const ANVIL_DEFAULT_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const
-
-/**
- * Get deployment configuration.
- *
- * SECURITY NOTES:
- * - In localnet: Uses well-known test key by default
- * - In testnet/mainnet: Requires DEPLOYER_PRIVATE_KEY env var
- * - Never commit private keys to source control
- * - Consider using hardware wallets for mainnet deployments
- */
-function getConfig(): DeployConfig {
-  const network = getCurrentNetwork()
-
-  const configs: Record<DeployConfig['network'], Partial<DeployConfig>> = {
-    localnet: {
-      dwsUrl: getCoreAppUrl('DWS_API'),
-      rpcUrl: getL2RpcUrl(),
-    },
-    testnet: {
-      dwsUrl: 'https://dws.testnet.jejunetwork.org',
-      rpcUrl: 'https://sepolia.base.org',
-    },
-    mainnet: {
-      dwsUrl: 'https://dws.jejunetwork.org',
-      rpcUrl: 'https://mainnet.base.org',
-    },
-  }
-
-  // Get private key based on network
-  let privateKey: `0x${string}`
-
-  if (network === 'localnet') {
-    // In localnet, use env var if provided, otherwise use Anvil default
-    const envKey = process.env.DEPLOYER_PRIVATE_KEY ?? process.env.PRIVATE_KEY
-    privateKey = (envKey ?? ANVIL_DEFAULT_KEY) as `0x${string}`
-  } else {
-    // In testnet/mainnet, REQUIRE explicit private key
-    const envKey = process.env.DEPLOYER_PRIVATE_KEY ?? process.env.PRIVATE_KEY
-    if (!envKey) {
-      throw new Error(
-        `DEPLOYER_PRIVATE_KEY required for ${network} deployment.\n` +
-          'Set via environment variable or use a hardware wallet.\n' +
-          'Never commit private keys to source control.',
-      )
-    }
-
-    // SECURITY: Warn if using a well-known test key in non-localnet
-    if (envKey === ANVIL_DEFAULT_KEY) {
-      throw new Error(
-        'CRITICAL: Detected Anvil test key in non-localnet environment.\n' +
-          'This is a well-known test key and must NOT be used in production.',
-      )
-    }
-
-    privateKey = envKey as `0x${string}`
-  }
-
-  return {
-    network,
-    ...configs[network],
-    privateKey,
-    cdnEnabled: process.env.CDN_ENABLED !== 'false',
-  } as DeployConfig
-}
 
 async function ensureBuild(): Promise<void> {
   const requiredFiles = ['./dist/api/index.js', './dist/web/index.html']
@@ -122,7 +29,10 @@ async function ensureBuild(): Promise<void> {
         stdout: 'inherit',
         stderr: 'inherit',
       })
-      await proc.exited
+      const exitCode = await proc.exited
+      if (exitCode !== 0) {
+        throw new Error('Build failed')
+      }
       return
     }
   }
@@ -130,336 +40,50 @@ async function ensureBuild(): Promise<void> {
   console.log('[Crucible] Build found')
 }
 
-interface UploadResult {
-  cid: string
-  hash: `0x${string}`
-  size: number
-}
-
-async function uploadToIPFS(
-  dwsUrl: string,
-  filePath: string,
-  name: string,
-): Promise<UploadResult> {
-  const content = await readFile(resolve(APP_DIR, filePath))
-  const hash = keccak256(content) as `0x${string}`
-
-  const formData = new FormData()
-  formData.append('file', new Blob([content]), name)
-  formData.append('name', name)
-
-  const response = await fetch(`${dwsUrl}/storage/upload`, {
-    method: 'POST',
-    body: formData,
-  })
-
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${await response.text()}`)
-  }
-
-  const rawJson: unknown = await response.json()
-  const parsed = IPFSUploadResponseSchema.safeParse(rawJson)
-  if (!parsed.success) {
-    throw new Error(`Invalid upload response: ${parsed.error.message}`)
-  }
-
-  return {
-    cid: parsed.data.cid,
-    hash,
-    size: content.length,
-  }
-}
-
-async function uploadDirectory(
-  dwsUrl: string,
-  dirPath: string,
-  prefix = '',
-): Promise<Map<string, UploadResult>> {
-  const results = new Map<string, UploadResult>()
-  const entries = await readdir(resolve(APP_DIR, dirPath), {
-    withFileTypes: true,
-  })
-
-  for (const entry of entries) {
-    const fullPath = join(dirPath, entry.name)
-    const key = prefix ? `${prefix}/${entry.name}` : entry.name
-
-    if (entry.isDirectory()) {
-      const subResults = await uploadDirectory(dwsUrl, fullPath, key)
-      for (const [k, v] of subResults) {
-        results.set(k, v)
-      }
-    } else {
-      const result = await uploadToIPFS(dwsUrl, fullPath, key)
-      results.set(key, result)
-      console.log(`   ${key} -> ${result.cid}`)
-    }
-  }
-
-  return results
-}
-
-async function deployWorker(
-  config: DeployConfig,
-  apiBundle: UploadResult,
-): Promise<string> {
-  const account = privateKeyToAccount(config.privateKey)
-
-  const deployRequest = {
-    name: 'crucible-api',
-    owner: account.address,
-    codeCid: apiBundle.cid,
-    codeHash: apiBundle.hash,
-    entrypoint: 'index.js',
-    runtime: 'bun',
-    resources: {
-      memoryMb: 512,
-      cpuMillis: 2000,
-      timeoutMs: 60000,
-      maxConcurrency: 100,
-    },
-    scaling: {
-      minInstances: 2,
-      maxInstances: 20,
-      targetConcurrency: 10,
-      scaleToZero: false,
-      cooldownMs: 60000,
-    },
-    requirements: {
-      teeRequired: true,
-      teePreferred: true,
-      minNodeReputation: 75,
-    },
-    routes: [
-      { pattern: '/api/*', zone: 'crucible' },
-      { pattern: '/a2a/*', zone: 'crucible' },
-      { pattern: '/mcp/*', zone: 'crucible' },
-      { pattern: '/health', zone: 'crucible' },
-      { pattern: '/.well-known/*', zone: 'crucible' },
-    ],
-    env: {
-      JEJU_NETWORK: config.network,
-      NETWORK: config.network,
-      RPC_URL: config.rpcUrl,
-      DWS_URL: config.dwsUrl,
-    },
-    secrets: ['ELIZA_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'],
-  }
-
-  const response = await fetch(`${config.dwsUrl}/workers`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-jeju-address': account.address,
-    },
-    body: JSON.stringify({
-      name: 'crucible-api',
-      codeCid: apiBundle.cid,
-      runtime: 'bun',
-      handler: 'index.js:default',
-      memory: deployRequest.resources.memoryMb,
-      timeout: deployRequest.resources.timeoutMs,
-      env: deployRequest.env,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Worker deployment failed: ${await response.text()}`)
-  }
-
-  const rawJson: unknown = await response.json()
-  const parsed = DWSWorkerDeployResponseSchema.safeParse(rawJson)
-  if (!parsed.success) {
-    throw new Error(`Invalid deploy response: ${parsed.error.message}`)
-  }
-  return parsed.data.functionId
-}
-
-function getContentType(path: string): string {
-  if (path.endsWith('.js')) return 'application/javascript'
-  if (path.endsWith('.css')) return 'text/css'
-  if (path.endsWith('.html')) return 'text/html'
-  if (path.endsWith('.json')) return 'application/json'
-  if (path.endsWith('.svg')) return 'image/svg+xml'
-  if (path.endsWith('.png')) return 'image/png'
-  return 'application/octet-stream'
-}
-
-async function setupCDN(
-  config: DeployConfig,
-  staticAssets: Map<string, UploadResult>,
-): Promise<void> {
-  if (!config.cdnEnabled) {
-    console.log('   CDN disabled, skipping...')
-    return
-  }
-
-  const assets = Array.from(staticAssets.entries()).map(([path, result]) => ({
-    path: `/${path}`,
-    cid: result.cid,
-    contentType: getContentType(path),
-    immutable:
-      path.includes('-') && (path.endsWith('.js') || path.endsWith('.css')),
-  }))
-
-  const domain =
-    config.network === 'testnet'
-      ? 'crucible.testnet.jejunetwork.org'
-      : config.network === 'mainnet'
-        ? 'crucible.jejunetwork.org'
-        : 'crucible.local.jejunetwork.org'
-
-  const cdnConfig = {
-    name: 'crucible',
-    domain,
-    spa: {
-      enabled: true,
-      fallback: '/index.html',
-      routes: ['/api/*', '/a2a/*', '/mcp/*', '/health', '/.well-known/*'],
-    },
-    assets,
-    cacheRules: [
-      { pattern: '/chunks/**', ttl: 31536000, immutable: true },
-      { pattern: '/assets/**', ttl: 31536000, immutable: true },
-      { pattern: '/*.js', ttl: 31536000, immutable: true },
-      { pattern: '/globals.css', ttl: 86400 },
-      { pattern: '/index.html', ttl: 300, staleWhileRevalidate: 86400 },
-    ],
-  }
-
-  const response = await fetch(`${config.dwsUrl}/cdn/configure`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cdnConfig),
-  })
-
-  if (!response.ok) {
-    console.warn(`   CDN configuration failed: ${await response.text()}`)
-  } else {
-    console.log('   CDN configured')
-  }
-}
-
-/**
- * Register app with DWS app router
- *
- * This is the key step for decentralized routing - registers the app's
- * staticFiles map with the app router so SPA routing works correctly.
- */
-async function _registerWithAppRouter(
-  config: DeployConfig,
-  staticAssets: Map<string, UploadResult>,
-  workerId: string,
-): Promise<void> {
-  // Build staticFiles map: path -> CID
-  const staticFiles: Record<string, string> = {}
-  for (const [path, result] of staticAssets) {
-    // Store with leading slash for consistency
-    staticFiles[`/${path}`] = result.cid
-  }
-
-  // For localnet, use direct endpoint. For testnet/mainnet, use worker routing only
-  // Don't set backendEndpoint to the same URL as frontend - that creates a routing loop
-  const backendEndpoint =
-    config.network === 'localnet' ? 'http://localhost:4021' : null
-
-  const appData = {
-    name: 'crucible',
-    jnsName: 'crucible.jeju',
-    frontendCid: staticFiles['/index.html'],
-    staticFiles,
-    backendWorkerId: workerId,
-    backendEndpoint,
-    apiPaths: ['/api/', '/a2a/', '/mcp/', '/health', '/.well-known/'],
-    spa: true,
-    enabled: true,
-  }
-
-  console.log(
-    `   Registering with staticFiles: ${Object.keys(staticFiles).length} paths`,
-  )
-
-  const response = await fetch(`${config.dwsUrl}/apps/deployed`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(appData),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`App router registration failed: ${text}`)
-  }
-
-  const rawJson: unknown = await response.json()
-  const result = z
-    .object({
-      success: z.boolean(),
-      warning: z.string().optional(),
-    })
-    .safeParse(rawJson)
-
-  if (!result.success) {
-    throw new Error(`Invalid registration response: ${result.error.message}`)
-  }
-
-  if (result.data.warning) {
-    console.warn(`   Warning: ${result.data.warning}`)
-  }
-
-  console.log('   App router registration complete')
-}
-
 async function deploy(): Promise<void> {
   console.log('╔════════════════════════════════════════════════════════════╗')
-  console.log('║              Crucible Deployment to DWS                     ║')
+  console.log('║              Crucible Deployment to DWS                    ║')
   console.log('╚════════════════════════════════════════════════════════════╝')
   console.log('')
 
-  const config = getConfig()
-  console.log(`Network:  ${config.network}`)
-  console.log(`DWS:      ${config.dwsUrl}`)
+  const network = getCurrentNetwork()
+  const dwsUrl = getDWSUrlForNetwork(network)
+
+  console.log(`Network:  ${network}`)
+  console.log(`DWS:      ${dwsUrl}`)
   console.log('')
 
+  // Build if needed
   await ensureBuild()
 
-  // Upload static assets (web/)
-  console.log('\nUploading static assets...')
-  const webAssets = await uploadDirectory(config.dwsUrl, './dist/web')
-  console.log(`   Total: ${webAssets.size} files\n`)
-
-  // Upload API bundle
-  console.log('Uploading API bundle...')
-  const apiBundle = await uploadToIPFS(
-    config.dwsUrl,
-    './dist/api/index.js',
-    'crucible-api.js',
-  )
-  console.log(`   API CID: ${apiBundle.cid}\n`)
-
-  // Deploy worker
-  console.log('Deploying worker to DWS...')
-  const workerId = await deployWorker(config, apiBundle)
-  console.log(`   Worker ID: ${workerId}\n`)
-
-  // Setup CDN
-  console.log('Configuring CDN...')
-  await setupCDN(config, webAssets)
-
-  const indexCid = webAssets.get('index.html')?.cid
-  const frontendDomain =
-    config.network === 'testnet'
-      ? 'crucible.testnet.jejunetwork.org'
-      : config.network === 'mainnet'
-        ? 'crucible.jejunetwork.org'
-        : 'crucible.local.jejunetwork.org'
+  // Deploy using standardized utility with verification
+  const result = await deployAndVerify({
+    name: 'crucible',
+    jnsName: 'crucible.jeju',
+    frontendDir: resolve(APP_DIR, 'dist/web'),
+    workerPath: resolve(APP_DIR, 'dist/api/index.js'),
+    apiPaths: [
+      '/api/*',
+      '/health',
+      '/a2a/*',
+      '/mcp/*',
+      '/agents/*',
+      '/rooms/*',
+    ],
+    spa: true,
+    dwsUrl,
+    skipSourceMaps: true,
+  })
 
   console.log('')
   console.log('[Crucible] Deployment complete.')
   console.log('\nEndpoints:')
-  console.log(`   Frontend: https://${frontendDomain}`)
-  console.log(`   IPFS: ipfs://${indexCid}`)
-  console.log(`   Worker: ${workerId}`)
-  console.log(`   API: ${config.dwsUrl}/workers/${workerId}`)
+  console.log(`   Frontend: ${result.appUrl}`)
+  console.log(`   Health: ${result.healthUrl}`)
+  console.log(`   Frontend CID: ${result.frontendCid}`)
+  if (result.backendWorkerId) {
+    console.log(`   Worker CID: ${result.backendWorkerId}`)
+  }
 }
 
 deploy().catch((error) => {

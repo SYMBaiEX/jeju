@@ -80,10 +80,10 @@ test.describe('Homepage', () => {
     await expect(page.getByRole('link', { name: /^Items$/i })).toBeVisible()
   })
 
-  test('shows connect wallet button when disconnected', async ({ page }) => {
+  test('shows sign in button when disconnected', async ({ page }) => {
     await page.goto('/')
     await expect(
-      page.getByRole('button', { name: /Connect Wallet/i }),
+      page.getByRole('button', { name: /Sign In/i }),
     ).toBeVisible()
   })
 

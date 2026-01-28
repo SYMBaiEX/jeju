@@ -82,6 +82,7 @@ test.describe('Desktop Navigation', () => {
 })
 
 test.describe('Page Routes', () => {
+  test.skip(isRemote, 'Skipping page routes on remote network')
   test('loads home page', async ({ page }) => {
     await page.goto('/')
     await expect(
@@ -156,6 +157,7 @@ test.describe('Page Routes', () => {
 })
 
 test.describe('Detail Pages', () => {
+  test.skip(isRemote, 'Skipping detail pages on remote network')
   test('loads repository detail page', async ({ page }) => {
     await page.goto('/git/jeju/factory')
     await expect(page.locator('h1').filter({ hasText: 'jeju' })).toBeVisible()
@@ -205,6 +207,7 @@ test.describe('Mobile Navigation', () => {
 })
 
 test.describe('Navigation Links Flow', () => {
+  test.skip(isRemote, 'Skipping navigation flow on remote network')
   test('navigation links work correctly', async ({ page }) => {
     await page.goto('/')
 

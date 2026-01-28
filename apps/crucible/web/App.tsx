@@ -1,4 +1,4 @@
-import { OAuth3Provider } from '@jejunetwork/auth/react'
+import { AuthCallback, OAuth3Provider } from '@jejunetwork/auth/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense, useMemo } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
@@ -101,6 +101,7 @@ export function App() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/agents" element={<AgentsPage />} />
               <Route path="/agents/new" element={<CreateAgentPage />} />
               <Route path="/agents/:id" element={<AgentDetailPage />} />

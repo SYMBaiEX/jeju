@@ -165,99 +165,111 @@ async function executeQuery(parsed: ParsedQuery): Promise<{
   data: Record<string, unknown> | null
   errors?: Array<{ message: string }>
 }> {
-  switch (parsed.type) {
-    case 'registeredAgents': {
-      const limit = parsed.args.limit ?? 100
-      const agents = await find<RegisteredAgent>('RegisteredAgent', {
-        order: { registeredAt: 'DESC' },
-        take: limit,
-      })
+  try {
+    switch (parsed.type) {
+      case 'registeredAgents': {
+        const limit = parsed.args.limit ?? 100
+        const agents = await find<RegisteredAgent>('RegisteredAgent', {
+          order: { registeredAt: 'DESC' },
+          take: limit,
+        })
 
-      // Map to GraphQL format with owner nested object
-      const mapped = agents.map((agent) => ({
-        id: agent.id,
-        agentId: String(agent.agentId),
-        owner: { address: agent.ownerAddress },
-        name: agent.name,
-        description: agent.description,
-        tags:
-          typeof agent.tags === 'string'
-            ? JSON.parse(agent.tags)
-            : (agent.tags ?? []),
-        tokenURI: agent.metadataUri,
-        stakeToken: 'ETH',
-        stakeAmount: agent.stakeAmount,
-        stakeTier: agent.stakeTier,
-        registeredAt: agent.registeredAt,
-        lastActivityAt: null,
-        active: agent.active,
-        isBanned: agent.isBanned,
-        a2aEndpoint: agent.a2aEndpoint,
-        mcpEndpoint: agent.mcpEndpoint,
-        serviceType: agent.serviceType ?? 'agent',
-        category: agent.category,
-        x402Support: agent.x402Support,
-        mcpTools:
-          typeof agent.mcpTools === 'string'
-            ? JSON.parse(agent.mcpTools)
-            : (agent.mcpTools ?? []),
-        a2aSkills:
-          typeof agent.a2aSkills === 'string'
-            ? JSON.parse(agent.a2aSkills)
-            : (agent.a2aSkills ?? []),
-        image: null,
-      }))
+        // Map to GraphQL format with owner nested object
+        const mapped = agents.map((agent) => ({
+          id: agent.id,
+          agentId: String(agent.agentId),
+          owner: { address: agent.ownerAddress },
+          name: agent.name,
+          description: agent.description,
+          tags:
+            typeof agent.tags === 'string'
+              ? JSON.parse(agent.tags)
+              : (agent.tags ?? []),
+          tokenURI: agent.metadataUri,
+          stakeToken: 'ETH',
+          stakeAmount: agent.stakeAmount,
+          stakeTier: agent.stakeTier,
+          registeredAt: agent.registeredAt,
+          lastActivityAt: null,
+          active: agent.active,
+          isBanned: agent.isBanned,
+          a2aEndpoint: agent.a2aEndpoint,
+          mcpEndpoint: agent.mcpEndpoint,
+          serviceType: agent.serviceType ?? 'agent',
+          category: agent.category,
+          x402Support: agent.x402Support,
+          mcpTools:
+            typeof agent.mcpTools === 'string'
+              ? JSON.parse(agent.mcpTools)
+              : (agent.mcpTools ?? []),
+          a2aSkills:
+            typeof agent.a2aSkills === 'string'
+              ? JSON.parse(agent.a2aSkills)
+              : (agent.a2aSkills ?? []),
+          image: null,
+        }))
 
-      return { data: { registeredAgents: mapped } }
-    }
-
-    case 'blocks': {
-      const limit = parsed.args.limit ?? 10
-      const blocks = await find<Block>('Block', {
-        order: { number: 'DESC' },
-        take: limit,
-      })
-      return { data: { blocks } }
-    }
-
-    case 'transactions': {
-      const limit = parsed.args.limit ?? 10
-      const txs = await find<Transaction>('Transaction', {
-        order: { blockNumber: 'DESC' },
-        take: limit,
-      })
-      return { data: { transactions: txs } }
-    }
-
-    case 'accounts': {
-      const limit = parsed.args.limit ?? 10
-      const accounts = await find<Account>('Account', {
-        order: { lastSeenAt: 'DESC' },
-        take: limit,
-      })
-      return { data: { accounts } }
-    }
-
-    case 'unknown':
-      // Return empty for introspection queries
-      if (parsed.fields.includes('__typename')) {
-        return { data: { __typename: 'Query' } }
-      }
-      return {
-        data: null,
-        errors: [
-          {
-            message:
-              'Unsupported query. Supported: registeredAgents, blocks, transactions, accounts. Use REST API at /api/* for full functionality.',
-          },
-        ],
+        return { data: { registeredAgents: mapped } }
       }
 
-    default:
-      return {
-        data: null,
-        errors: [{ message: `Unknown query type: ${parsed.type}` }],
+      case 'blocks': {
+        const limit = parsed.args.limit ?? 10
+        const blocks = await find<Block>('Block', {
+          order: { number: 'DESC' },
+          take: limit,
+        })
+        return { data: { blocks } }
       }
+
+      case 'transactions': {
+        const limit = parsed.args.limit ?? 10
+        const txs = await find<Transaction>('Transaction', {
+          order: { blockNumber: 'DESC' },
+          take: limit,
+        })
+        return { data: { transactions: txs } }
+      }
+
+      case 'accounts': {
+        const limit = parsed.args.limit ?? 10
+        const accounts = await find<Account>('Account', {
+          order: { lastSeenAt: 'DESC' },
+          take: limit,
+        })
+        return { data: { accounts } }
+      }
+
+      case 'unknown':
+        // Return empty for introspection queries
+        if (parsed.fields.includes('__typename')) {
+          return { data: { __typename: 'Query' } }
+        }
+        return {
+          data: null,
+          errors: [
+            {
+              message:
+                'Unsupported query. Supported: registeredAgents, blocks, transactions, accounts. Use REST API at /api/* for full functionality.',
+            },
+          ],
+        }
+
+      default:
+        return {
+          data: null,
+          errors: [{ message: `Unknown query type: ${parsed.type}` }],
+        }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      data: null,
+      errors: [
+        {
+          message: `Database error: ${message}. The indexer database may not be available in this worker environment.`,
+        },
+      ],
+    }
   }
 }
 
@@ -289,9 +301,10 @@ const app = new Elysia()
     endpoints: {
       health: '/health',
       graphql: '/graphql',
-      agents: '/api/agents',
-      blocks: '/api/blocks',
-      transactions: '/api/transactions',
+      stats: '/stats',
+      agents: '/agents',
+      blocks: '/blocks',
+      transactions: '/transactions',
     },
   }))
   // GraphQL playground (GET)
@@ -343,96 +356,143 @@ const app = new Elysia()
     const queryAst = parseGraphQLQuery(parsed.data.query)
     return await executeQuery(queryAst)
   })
+  // REST: Stats endpoint for frontend
+  .get('/stats', async () => {
+    // Return basic stats - database may not be available in worker
+    // TODO: Connect to SQLit when available in worker environment
+    return {
+      totalBlocks: 0,
+      totalTransactions: 0,
+      totalAccounts: 0,
+      totalContracts: 0,
+      totalTokenTransfers: 0,
+      totalAgents: 0,
+      latestBlockNumber: 0,
+      latestBlockTimestamp: new Date().toISOString(),
+      status: 'worker-mode',
+    }
+  })
   // REST: List agents
-  .get('/api/agents', async ({ query: queryParams }) => {
-    const limit = queryParams.limit
-      ? parseInt(queryParams.limit as string, 10)
-      : 100
-    const offset = queryParams.offset
-      ? parseInt(queryParams.offset as string, 10)
-      : 0
+  .get('/agents', async ({ query: queryParams, set }) => {
+    try {
+      const limit = queryParams.limit
+        ? parseInt(queryParams.limit as string, 10)
+        : 100
+      const offset = queryParams.offset
+        ? parseInt(queryParams.offset as string, 10)
+        : 0
 
-    const agents = await find<RegisteredAgent>('RegisteredAgent', {
-      order: { registeredAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    })
-    const total = await count('RegisteredAgent')
+      const agents = await find<RegisteredAgent>('RegisteredAgent', {
+        order: { registeredAt: 'DESC' },
+        take: limit,
+        skip: offset,
+      })
+      const total = await count('RegisteredAgent')
 
-    // Map to frontend-friendly format
-    const mapped = agents.map((agent) => ({
-      agentId: String(agent.agentId),
-      name: agent.name,
-      description: agent.description,
-      owner: agent.ownerAddress,
-      tags:
-        typeof agent.tags === 'string'
-          ? JSON.parse(agent.tags)
-          : (agent.tags ?? []),
-      stakeAmount: agent.stakeAmount,
-      stakeTier: agent.stakeTier,
-      registeredAt: agent.registeredAt,
-      active: agent.active,
-      a2aEndpoint: agent.a2aEndpoint,
-      mcpEndpoint: agent.mcpEndpoint,
-      serviceType: agent.serviceType ?? 'agent',
-      category: agent.category,
-      x402Support: agent.x402Support,
-    }))
+      // Map to frontend-friendly format
+      const mapped = agents.map((agent) => ({
+        agentId: String(agent.agentId),
+        name: agent.name,
+        description: agent.description,
+        owner: agent.ownerAddress,
+        tags:
+          typeof agent.tags === 'string'
+            ? JSON.parse(agent.tags)
+            : (agent.tags ?? []),
+        stakeAmount: agent.stakeAmount,
+        stakeTier: agent.stakeTier,
+        registeredAt: agent.registeredAt,
+        active: agent.active,
+        a2aEndpoint: agent.a2aEndpoint,
+        mcpEndpoint: agent.mcpEndpoint,
+        serviceType: agent.serviceType ?? 'agent',
+        category: agent.category,
+        x402Support: agent.x402Support,
+      }))
 
-    return { agents: mapped, total, limit, offset }
+      return { agents: mapped, total, limit, offset }
+    } catch (error) {
+      set.status = 503
+      const message = error instanceof Error ? error.message : String(error)
+      return { error: `Database unavailable: ${message}`, agents: [], total: 0 }
+    }
   })
   // REST: Get agent by ID
-  .get('/api/agents/:id', async ({ params, set }) => {
-    const agent = await findOne<RegisteredAgent>('RegisteredAgent', params.id)
-    if (!agent) {
-      set.status = 404
-      return { error: 'Agent not found' }
+  .get('/agents/:id', async ({ params, set }) => {
+    try {
+      const agent = await findOne<RegisteredAgent>('RegisteredAgent', params.id)
+      if (!agent) {
+        set.status = 404
+        return { error: 'Agent not found' }
+      }
+      return agent
+    } catch (error) {
+      set.status = 503
+      const message = error instanceof Error ? error.message : String(error)
+      return { error: `Database unavailable: ${message}` }
     }
-    return agent
   })
   // REST: List blocks
-  .get('/api/blocks', async ({ query: queryParams }) => {
-    const limit = queryParams.limit
-      ? parseInt(queryParams.limit as string, 10)
-      : 10
-    const blocks = await find<Block>('Block', {
-      order: { number: 'DESC' },
-      take: limit,
-    })
-    return { blocks }
+  .get('/blocks', async ({ query: queryParams, set }) => {
+    try {
+      const limit = queryParams.limit
+        ? parseInt(queryParams.limit as string, 10)
+        : 10
+      const blocks = await find<Block>('Block', {
+        order: { number: 'DESC' },
+        take: limit,
+      })
+      return { blocks }
+    } catch (error) {
+      set.status = 503
+      const message = error instanceof Error ? error.message : String(error)
+      return { error: `Database unavailable: ${message}`, blocks: [] }
+    }
   })
   // REST: List transactions
-  .get('/api/transactions', async ({ query: queryParams }) => {
-    const limit = queryParams.limit
-      ? parseInt(queryParams.limit as string, 10)
-      : 10
-    const txs = await find<Transaction>('Transaction', {
-      order: { blockNumber: 'DESC' },
-      take: limit,
-    })
-    return { transactions: txs }
+  .get('/transactions', async ({ query: queryParams, set }) => {
+    try {
+      const limit = queryParams.limit
+        ? parseInt(queryParams.limit as string, 10)
+        : 10
+      const txs = await find<Transaction>('Transaction', {
+        order: { blockNumber: 'DESC' },
+        take: limit,
+      })
+      return { transactions: txs }
+    } catch (error) {
+      set.status = 503
+      const message = error instanceof Error ? error.message : String(error)
+      return { error: `Database unavailable: ${message}`, transactions: [] }
+    }
   })
   // REST: Search
-  .get('/api/search', async ({ query: queryParams }) => {
-    const q = (queryParams.q as string) || ''
-    const limit = queryParams.limit
-      ? parseInt(queryParams.limit as string, 10)
-      : 20
+  .get('/search', async ({ query: queryParams, set }) => {
+    try {
+      const q = (queryParams.q as string) || ''
+      const limit = queryParams.limit
+        ? parseInt(queryParams.limit as string, 10)
+        : 20
 
-    // Search agents by name
-    const result = await query<RegisteredAgent>(
-      `SELECT * FROM registered_agent WHERE name LIKE ? ORDER BY registered_at DESC LIMIT ?`,
-      [`%${q}%`, limit],
-    )
+      // Search agents by name
+      const result = await query<RegisteredAgent>(
+        `SELECT * FROM registered_agent WHERE name LIKE ? ORDER BY registered_at DESC LIMIT ?`,
+        [`%${q}%`, limit],
+      )
 
-    return { results: result.rows, query: q }
+      return { results: result.rows, query: q }
+    } catch (error) {
+      set.status = 503
+      const message = error instanceof Error ? error.message : String(error)
+      return { error: `Database unavailable: ${message}`, results: [] }
+    }
   })
 
-// Export the default handler for DWS worker runtime
+// Export the fetch handler for DWS worker runtime
 export default {
-  port: parseInt(process.env.PORT ?? '3000', 10),
-  fetch: app.fetch,
+  async fetch(request: Request): Promise<Response> {
+    return app.handle(request)
+  },
 }
 
 // Also export the app for direct usage

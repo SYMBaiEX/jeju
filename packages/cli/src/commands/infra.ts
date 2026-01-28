@@ -1,91 +1,12 @@
 /** Infrastructure deployment and management commands */
 
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Command } from 'commander'
 import { execa } from 'execa'
 import { logger } from '../lib/logger'
 import { findMonorepoRoot } from '../lib/system'
 import { createInfrastructureService } from '../services/infrastructure'
-
-interface SyncConfig {
-  sourceDir: string
-  filePattern: string
-  configMapName: string
-  namespace: string
-  label: string
-}
-
-async function syncToConfigMap(config: SyncConfig): Promise<void> {
-  const { sourceDir, filePattern, configMapName, namespace, label } = config
-
-  logger.info(`${label}: Syncing to Kubernetes namespace: ${namespace}...`)
-
-  if (!existsSync(sourceDir)) {
-    logger.warn(`Source directory not found: ${sourceDir}`)
-    return
-  }
-
-  const files = readdirSync(sourceDir).filter((f) => f.endsWith(filePattern))
-
-  if (files.length === 0) {
-    logger.info('No files found. Nothing to sync.')
-    return
-  }
-
-  logger.info(`Found ${files.length} files:`)
-  for (const file of files) {
-    logger.info(`  - ${file}`)
-  }
-
-  const fromFileArgs = files.map(
-    (file) => `--from-file=${join(sourceDir, file)}`,
-  )
-
-  logger.info(
-    `Creating/updating ConfigMap '${configMapName}' in namespace '${namespace}'...`,
-  )
-
-  // Try to create, if exists delete and recreate
-  const createResult = await execa(
-    'kubectl',
-    ['create', 'configmap', configMapName, '-n', namespace, ...fromFileArgs],
-    { reject: false },
-  )
-
-  if (createResult.exitCode !== 0) {
-    logger.info('ConfigMap might already exist. Attempting to recreate...')
-
-    await execa(
-      'kubectl',
-      [
-        'delete',
-        'configmap',
-        configMapName,
-        '-n',
-        namespace,
-        '--ignore-not-found',
-      ],
-      { reject: false },
-    )
-
-    const recreateResult = await execa(
-      'kubectl',
-      ['create', 'configmap', configMapName, '-n', namespace, ...fromFileArgs],
-      { reject: false },
-    )
-
-    if (recreateResult.exitCode !== 0) {
-      logger.error(`Failed to recreate ConfigMap: ${recreateResult.stderr}`)
-      return
-    }
-  }
-
-  logger.success(`${label} synced successfully.`)
-  logger.info(
-    `Verify with: kubectl get configmap ${configMapName} -n ${namespace} -o yaml`,
-  )
-}
 
 const infraCommand = new Command('infra')
   .description('Infrastructure deployment and management')
@@ -263,9 +184,7 @@ infraCommand
 
 infraCommand
   .command('validate')
-  .description(
-    'Validate all deployment configurations (Terraform, Helm, Kurtosis)',
-  )
+  .description('Validate all deployment configurations (Helm, Kurtosis)')
   .action(async () => {
     const rootDir = findMonorepoRoot()
     const scriptPath = join(rootDir, 'packages/deployment/scripts/validate.ts')
@@ -280,117 +199,6 @@ infraCommand
       stdio: 'inherit',
     })
   })
-
-infraCommand
-  .command('terraform')
-  .description('Terraform operations for infrastructure')
-  .argument(
-    '[command]',
-    'Command: init | plan | apply | destroy | output',
-    'plan',
-  )
-  .option(
-    '--network <network>',
-    'Network: localnet | testnet | mainnet',
-    'testnet',
-  )
-  .action(async (command: string = 'plan', options: { network: string }) => {
-    const rootDir = findMonorepoRoot()
-    const scriptPath = join(rootDir, 'packages/deployment/scripts/terraform.ts')
-
-    if (!existsSync(scriptPath)) {
-      logger.error('Terraform script not found')
-      return
-    }
-
-    await execa('bun', ['run', scriptPath, command], {
-      cwd: rootDir,
-      env: { ...process.env, NETWORK: options.network },
-      stdio: 'inherit',
-    })
-  })
-
-infraCommand
-  .command('helmfile')
-  .description('Helmfile operations for Kubernetes deployments')
-  .argument(
-    '[command]',
-    'Command: diff | sync | apply | destroy | status | list',
-    'diff',
-  )
-  .option(
-    '--network <network>',
-    'Network: localnet | testnet | mainnet',
-    'testnet',
-  )
-  .action(async (command: string = 'diff', options: { network: string }) => {
-    const rootDir = findMonorepoRoot()
-    const scriptPath = join(rootDir, 'packages/deployment/scripts/helmfile.ts')
-
-    if (!existsSync(scriptPath)) {
-      logger.error('Helmfile script not found')
-      return
-    }
-
-    await execa('bun', ['run', scriptPath, command], {
-      cwd: rootDir,
-      env: { ...process.env, NETWORK: options.network },
-      stdio: 'inherit',
-    })
-  })
-
-infraCommand
-  .command('deploy-full')
-  .description(
-    'Full deployment pipeline (validate, terraform, images, kubernetes, verify)',
-  )
-  .option('--network <network>', 'Network: testnet | mainnet', 'testnet')
-  .option('--skip-validate', 'Skip validation step')
-  .option('--skip-terraform', 'Skip Terraform step')
-  .option('--skip-images', 'Skip Docker image builds')
-  .option('--skip-kubernetes', 'Skip Kubernetes deployment')
-  .option('--skip-verify', 'Skip verification step')
-  .option('--build-sqlit', 'Build SQLit image')
-  .action(
-    async (options: {
-      network: string
-      skipValidate?: boolean
-      skipTerraform?: boolean
-      skipImages?: boolean
-      skipKubernetes?: boolean
-      skipVerify?: boolean
-      buildSQLit?: boolean
-    }) => {
-      const rootDir = findMonorepoRoot()
-      const scriptPath = join(
-        rootDir,
-        'packages/deployment/scripts/deploy-full.ts',
-      )
-
-      if (!existsSync(scriptPath)) {
-        logger.error('Deploy full script not found')
-        return
-      }
-
-      const env: Record<string, string> = {
-        ...process.env,
-        NETWORK: options.network,
-      }
-
-      if (options.skipValidate) env.SKIP_VALIDATE = 'true'
-      if (options.skipTerraform) env.SKIP_TERRAFORM = 'true'
-      if (options.skipImages) env.SKIP_IMAGES = 'true'
-      if (options.skipKubernetes) env.SKIP_KUBERNETES = 'true'
-      if (options.skipVerify) env.SKIP_VERIFY = 'true'
-      if (options.buildSQLit) env.BUILD_SQLIT_IMAGE = 'true'
-
-      await execa('bun', ['run', scriptPath], {
-        cwd: rootDir,
-        env,
-        stdio: 'inherit',
-      })
-    },
-  )
 
 infraCommand
   .command('genesis')
@@ -482,42 +290,6 @@ infraCommand
   )
 
 infraCommand
-  .command('sync-alerts')
-  .description('Sync Prometheus alerts to Kubernetes ConfigMap')
-  .option('--namespace <ns>', 'Kubernetes namespace', 'monitoring')
-  .action(async (options: { namespace: string }) => {
-    const rootDir = findMonorepoRoot()
-    await syncToConfigMap({
-      sourceDir: join(rootDir, 'monitoring', 'prometheus', 'alerts'),
-      filePattern: '.yaml',
-      configMapName: 'prometheus-rules',
-      namespace: options.namespace,
-      label: 'Prometheus Alerts',
-    })
-    logger.info(
-      'Note: Your Prometheus instance must be configured to load rules from this ConfigMap.',
-    )
-  })
-
-infraCommand
-  .command('sync-dashboards')
-  .description('Sync Grafana dashboards to Kubernetes ConfigMap')
-  .option('--namespace <ns>', 'Kubernetes namespace', 'monitoring')
-  .action(async (options: { namespace: string }) => {
-    const rootDir = findMonorepoRoot()
-    await syncToConfigMap({
-      sourceDir: join(rootDir, 'monitoring', 'grafana', 'dashboards'),
-      filePattern: '.json',
-      configMapName: 'grafana-dashboards',
-      namespace: options.namespace,
-      label: 'Grafana Dashboards',
-    })
-    logger.info(
-      'Note: Your Grafana instance must be configured to load dashboards from this ConfigMap.',
-    )
-  })
-
-infraCommand
   .command('auto-update')
   .description('Start auto-update daemon for node management')
   .option('--network <network>', 'Network: localnet | testnet | mainnet')
@@ -535,31 +307,6 @@ infraCommand
 
     const args = ['run', scriptPath]
     if (options.network) args.push('--network', options.network)
-
-    await execa('bun', args, {
-      cwd: rootDir,
-      stdio: 'inherit',
-    })
-  })
-
-infraCommand
-  .command('validate-helm')
-  .description('Validate Helm charts')
-  .option('--chart <chart>', 'Validate specific chart only')
-  .action(async (options: { chart?: string }) => {
-    const rootDir = findMonorepoRoot()
-    const scriptPath = join(
-      rootDir,
-      'packages/tests/scripts/test-helm-charts.ts',
-    )
-
-    if (!existsSync(scriptPath)) {
-      logger.error('Helm charts validation script not found')
-      return
-    }
-
-    const args = ['run', scriptPath]
-    if (options.chart) args.push('--chart', options.chart)
 
     await execa('bun', args, {
       cwd: rootDir,

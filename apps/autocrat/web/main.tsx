@@ -1,4 +1,5 @@
 import { OAuth3Provider } from '@jejunetwork/auth/react'
+import type { OAuth3AppConfig } from '@jejunetwork/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -7,7 +8,7 @@ import { defineChain } from 'viem'
 import { createConfig, http, WagmiProvider } from 'wagmi'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
-import { CHAIN_ID, OAUTH3_AGENT_URL, RPC_URL } from './config/env'
+import { CHAIN_ID, NETWORK, OAUTH3_AGENT_URL, RPC_URL } from './config/env'
 import AdminPage from './pages/Admin'
 import AgentEditPage from './pages/AgentEdit'
 import AuthCallbackPage from './pages/AuthCallback'
@@ -57,13 +58,17 @@ function App() {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <OAuth3Provider
-          config={{
-            appId: 'autocrat.apps.jeju',
-            redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
-            chainId: CHAIN_ID,
-            rpcUrl: RPC_URL,
-            teeAgentUrl: OAUTH3_AGENT_URL,
-          }}
+          config={
+            {
+              appId: 'autocrat.apps.jeju',
+              redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+              chainId: CHAIN_ID,
+              rpcUrl: RPC_URL,
+              teeAgentUrl: OAUTH3_AGENT_URL,
+              network: NETWORK,
+              decentralized: NETWORK !== 'localnet',
+            } satisfies OAuth3AppConfig
+          }
         >
           <BrowserRouter>
             <Routes>

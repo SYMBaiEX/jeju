@@ -66,6 +66,7 @@ test.describe('Bounty List', () => {
 })
 
 test.describe('Bounty Filters', () => {
+  test.skip(isRemote, 'Skipping bounty filters on remote network')
   test('filters by skill tags', async ({ page }) => {
     await page.goto('/bounties')
     const skillBadges = page.locator('.badge, [class*="tag"]')
@@ -85,6 +86,7 @@ test.describe('Bounty Filters', () => {
 })
 
 test.describe('Create Bounty', () => {
+  test.skip(isRemote, 'Skipping bounty creation on remote network')
   test('shows create bounty button', async ({ page }) => {
     await page.goto('/bounties')
     const createButton = page.getByRole('link', {

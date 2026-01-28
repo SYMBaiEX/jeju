@@ -66,6 +66,7 @@ import {
   type DistributedRateLimiter,
   type P2PCoordinator,
 } from '../decentralized'
+import { createCLIRoutes } from '../cli/routes'
 import {
   createAppDeployerRouter,
   createGitHubIntegrationRouter,
@@ -106,9 +107,11 @@ import {
   getDeployedApp,
   initializeAppRouter,
   proxyToBackend,
+  setSharedWorkerdExecutor,
 } from './routes/app-router'
 import { createCDNRouter } from './routes/cdn'
 import { createCIRouter } from './routes/ci'
+import { registerConfiguredInferenceProviders } from '../compute/local-inference-providers'
 import { createComputeRouter } from './routes/compute'
 import { createContainerRouter } from './routes/containers'
 import { createCronRouter } from './routes/cron'
@@ -827,6 +830,7 @@ app.use(createCDNRouter())
 app.use(createGitRouter({ repoManager, backend: backendManager }))
 app.use(createPkgRouter({ registryManager, backend: backendManager }))
 app.use(createPyPkgRouter({ registryManager, backend: backendManager }))
+app.use(createCLIRoutes())
 app.use(
   createCIRouter({ workflowEngine, repoManager, backend: backendManager }),
 )
@@ -1295,7 +1299,35 @@ app.get('/*', async ({ path, set }) => {
 })
 
 // Initialize services
-initializeMarketplace()
+const host = getLocalhostHost()
+const inferenceBaseUrl =
+  NETWORK === 'localnet'
+    ? `http://${host}:${PORT}`
+    : (getDWSUrl(NETWORK) ?? `http://${host}:${PORT}`)
+
+const registerInferenceProviders = async () => {
+  const count = await registerConfiguredInferenceProviders(inferenceBaseUrl)
+  if (count > 0) {
+    console.log(`[DWS] Registered ${count} local inference providers`)
+  }
+}
+
+registerInferenceProviders().catch((err) => {
+  const message = err instanceof Error ? err.message : String(err)
+  console.warn('[DWS] Inference provider init failed:', message)
+})
+
+setInterval(() => {
+  registerInferenceProviders().catch((err) => {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn('[DWS] Inference provider refresh failed:', message)
+  })
+}, 60000)
+
+initializeMarketplace().catch((err) => {
+  const message = err instanceof Error ? err.message : String(err)
+  console.warn('[DWS] Marketplace init failed:', message)
+})
 initializeContainerSystem()
 
 // Initialize DWS cache provisioning
@@ -1320,6 +1352,7 @@ initRegistry({ sqlitUrl: SQLIT_URL, databaseId: AGENTS_DB_ID }).catch((err) => {
 
 // Agent executor - initialized after server starts (see below)
 const workerdExecutor = new WorkerdExecutor(backendManager)
+setSharedWorkerdExecutor(workerdExecutor)
 
 let server: ReturnType<typeof Bun.serve> | null = null
 
@@ -1588,6 +1621,12 @@ if (import.meta.main) {
     | PriceWebSocketData
     | EdgeWebSocketData
     | DurableObjectWebSocketData
+
+  // CRITICAL: Initialize DWS state (SQLit tables) BEFORE accepting requests
+  // This prevents race conditions where requests hit endpoints before tables exist
+  console.log('[DWS] Initializing state...')
+  await initializeDWSState()
+  console.log('[DWS] State ready')
 
   server = Bun.serve({
     port: PORT,
@@ -1929,45 +1968,35 @@ if (import.meta.main) {
       console.warn('[DWS] Agent executor init failed:', err.message)
     })
 
-  // Initialize DWS state (determines memory-only vs SQLit mode)
-  initializeDWSState()
-    .then(async () => {
-      console.log('[DWS] State initialized')
-
-      // Start Durable Objects manager
-      startDurableObjectManager()
-        .then(() => {
-          console.log('[DWS] Durable Objects manager started')
-        })
-        .catch((err) => {
-          console.warn(
-            '[DWS] Durable Objects manager init failed:',
-            err.message,
-          )
-        })
-
-      // Start Cron Executor after state is initialized
-      const { startCronExecutor } = await import('../workers/cron-executor')
-      try {
-        const cronExecutor = startCronExecutor({
-          workerBaseUrl: `http://localhost:${PORT}`,
-          tickIntervalMs: 30000, // Check every 30 seconds
-          maxConcurrent: 10,
-          lockTtlSeconds: 300, // 5 minute lock TTL
-        })
-        const stats = await cronExecutor.getStats()
-        console.log(
-          `[DWS] Cron executor started (${stats.cronStats.enabled} enabled crons)`,
-        )
-      } catch (err) {
-        console.warn(
-          '[DWS] Cron executor init failed:',
-          err instanceof Error ? err.message : String(err),
-        )
-      }
+  // State already initialized before server started - now start dependent services
+  // Start Durable Objects manager
+  startDurableObjectManager()
+    .then(() => {
+      console.log('[DWS] Durable Objects manager started')
     })
     .catch((err) => {
-      console.warn('[DWS] State init warning:', err.message)
+      console.warn('[DWS] Durable Objects manager init failed:', err.message)
+    })
+
+  // Start Cron Executor
+  import('../workers/cron-executor')
+    .then(async ({ startCronExecutor }) => {
+      const cronExecutor = startCronExecutor({
+        workerBaseUrl: `http://localhost:${PORT}`,
+        tickIntervalMs: 30000, // Check every 30 seconds
+        maxConcurrent: 10,
+        lockTtlSeconds: 300, // 5 minute lock TTL
+      })
+      const stats = await cronExecutor.getStats()
+      console.log(
+        `[DWS] Cron executor started (${stats.cronStats.enabled} enabled crons)`,
+      )
+    })
+    .catch((err) => {
+      console.warn(
+        '[DWS] Cron executor init failed:',
+        err instanceof Error ? err.message : String(err),
+      )
     })
 
   // Discover existing DWS-managed containers on startup

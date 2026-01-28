@@ -46,9 +46,15 @@ async function connectWallet(
   )
 
   await page.goto('/')
-  const connectBtn = page.getByRole('button', { name: /Connect Wallet/i })
-  if (await connectBtn.isVisible()) {
-    await connectBtn.click()
+  const signInButton = page.getByRole('button', { name: /sign in/i })
+  if (await signInButton.isVisible()) {
+    await signInButton.click()
+    const walletOption = page.getByRole('button', {
+      name: /connect wallet/i,
+    })
+    if (await walletOption.isVisible().catch(() => false)) {
+      await walletOption.click()
+    }
     await page.waitForTimeout(1000)
     await metamask.connectToDapp()
     await expect(page.getByText(/0xf39F/i)).toBeVisible({ timeout: 15000 })
@@ -82,7 +88,7 @@ test.describe('Token Creation', () => {
     const buttonText = await createButton.textContent()
 
     expect(buttonText).toBeTruthy()
-    expect(buttonText).not.toContain('Connect Wallet')
+    expect(buttonText).not.toContain('Sign In')
   })
 
   test('has all form fields', async ({ page }) => {

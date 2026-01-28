@@ -409,6 +409,7 @@ export const PasskeyOptionsResponseSchema = z.object({
     PublicKeyCredentialCreationOptionsSchema,
     PublicKeyCredentialRequestOptionsSchema,
   ]),
+  mode: z.enum(['registration', 'authentication']).optional(),
 })
 
 export type PasskeyPublicKeyOptions = z.infer<

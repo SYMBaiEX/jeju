@@ -36,49 +36,49 @@
       "evidenceRegistry": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0"
     },
     "bazaar": {
-      "marketplace": "0xf4B146FbA71F41E0592668ffbF264F1D186b2Ca8",
-      "simpleCollectible": "0xBEc49fA140aCaA83533fB00A2BB19bDdd0290f25",
+      "marketplace": "0x2B0d36FACD61B71CC05ab8F3D2355ec3631C0dd5",
+      "simpleCollectible": "0xC9a43158891282A2B1475592D5719c001986Aaec",
       "predictionMarket": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
       "tokenFactory": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
       "featuredToken": "",
       "predictionOracle": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0"
     },
     "perps": {
-      "market": "0xc96304e3c037f81dA488ed9dEa1D8F2a48278a75",
-      "marginManager": "0xc0F115A19107322cFBf1cDBC7ea011C19EbDB4F8",
-      "insuranceFund": "0xF8e31cb472bc70500f08Cd84917E5A1912Ec8397",
+      "market": "0xA7c59f010700930003b33aB25a7a0679C860f29c",
+      "marginManager": "0x22753E4264FDDc6181dc7cce468904A80a363E44",
+      "insuranceFund": "0x07882Ae1ecB7429a84f1D53048d35c4bB2056877",
       "priceOracle": "0xb7f8bc63bbcad18155201308c8f3540b07f84f5e"
     },
     "security": {
-      "bountyRegistry": "0x09635F643e140090A9A8Dcd712eD6285858ceBef"
+      "bountyRegistry": "0x851356ae760d987E095750cCeb3bC6014560891C"
     },
     "nodeStaking": {
-      "manager": "0x4A679253410272dd5232B3Ff7cF5dbB88f295319",
-      "performanceOracle": "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f"
+      "manager": "0xc5a5C42992dECbae36851359345FE25997F5C42d",
+      "performanceOracle": "0x09635F643e140090A9A8Dcd712eD6285858ceBef"
     },
     "jns": {
-      "registry": "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
-      "resolver": "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690",
+      "registry": "0x998abeb3E57409262aE5b751f60747921B33613E",
+      "resolver": "0x70e0bA845a1A0F2DA3359C97E0285013525FFC49",
       "registrar": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
       "reverseRegistrar": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
     },
     "oauth3": {
-      "teeVerifier": "0x51A1ceB83B83F1985a81C295d1fF28Afef186E02",
-      "identityRegistry": "0x36b58F5C1969B7b6591D752ea6F5486D069010AB",
-      "appRegistry": "0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7",
-      "staking": "0x0355B7B8cb128fA5692729Ab3AAa199C1753f726"
+      "teeVerifier": "0xf4B146FbA71F41E0592668ffbF264F1D186b2Ca8",
+      "identityRegistry": "0x172076E0166D1F9Cc711C77Adf8488051744980C",
+      "appRegistry": "0x4EE6eCAD1c2Dae9f525404De8555724e3c35d07B",
+      "staking": "0xBEc49fA140aCaA83533fB00A2BB19bDdd0290f25"
     },
     "dws": {
-      "storageManager": "0x2E2Ed0Cfd3AD2f1d34481277b3204d807Ca2F8c2",
-      "workerRegistry": "0xD8a5a9b31c3C0232E196d518E89Fd8bF83AcAd43",
-      "cdnRegistry": "0xDC11f7E700A4c898AE5CAddB1082cFfa76512aDD",
+      "storageManager": "0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7",
+      "workerRegistry": "0x0355B7B8cb128fA5692729Ab3AAa199C1753f726",
+      "cdnRegistry": "0x202CCe504e04bEd6fC0521238dDf04Bc9E8E15aB",
       "repoRegistry": "0x0dcd1bf9a1b36ce34237eeafef220932846bcd82",
-      "packageRegistry": "0x205cfc23ef26922e116135500abb4b12ab6d4668",
-      "managedDatabaseRegistry": "0x8659df1c638cda8e475cd3c6481730c2b4f85873",
-      "gitRegistry": "0xab8eb9f37bd460df99b11767aa843a8f27fb7a6e",
-      "cacheManager": "0xbb57fe325e769dedb1236525a91cded842143fa7",
-      "cronOrchestrator": "0xd69bc314bdaa329eb18f36e4897d96a3a48c3eef",
-      "containerRegistry": "0x6712008ccd96751d586fdba0def5495e0e22d904",
+      "packageRegistry": "0x4bf010f1b9beda5450a8dd702ed602a104ff65ee",
+      "managedDatabaseRegistry": "0xde2bd2ffea002b8e84adea96e5976af664115e2c",
+      "gitRegistry": "0x0ed64d01d0b4b655e410ef1441dd677b695639e7",
+      "cacheManager": "0x40a42baf86fc821f972ad2ac878729063ceef403",
+      "cronOrchestrator": "0x96f3ce39ad2bfdcf92c0f6e2c2cabf83874660fc",
+      "containerRegistry": "0x986aaa537b8cc170761fdac6ac4fc7f9d8a20a8c",
       "storageProviderRegistry": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
       "identityRegistry": "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707"
     },
@@ -109,13 +109,13 @@
       "inferenceServing": "0x08A90aF9A6eBBe11c322AD9930CC58E122231B5A",
       "staking": "0x7bdd3b028C4796eF0EAf07d11394d0d9d8c24139",
       "workerRegistry": "",
-      "cronTriggerRegistry": "0xd69bc314bdaa329eb18f36e4897d96a3a48c3eef"
+      "cronTriggerRegistry": "0x96f3ce39ad2bfdcf92c0f6e2c2cabf83874660fc"
     },
     "sequencer": {
-      "registry": "0x22753E4264FDDc6181dc7cce468904A80a363E44",
+      "registry": "0x3155755b79aA083bd953911C92705B7aA82a18F9",
       "thresholdBatchSubmitter": "",
-      "forcedInclusion": "0xA7c59f010700930003b33aB25a7a0679C860f29c",
-      "slashing": "0xfaAddC93baf78e89DCf37bA67943E1bE8F37Bb8c"
+      "forcedInclusion": "0x5bf5b11053e734690269C6B9D438F8C9d48F528A",
+      "slashing": "0xffa7CA1AEEEbBc30C874d32C7e22F052BbEa0429"
     },
     "governance": {
       "governor": "",
@@ -144,10 +144,10 @@
       "federationGovernance": ""
     },
     "liquidity": {
-      "riskSleeve": "",
-      "liquidityRouter": "",
-      "multiServiceStakeManager": "",
-      "liquidityVault": "",
+      "riskSleeve": "0x67d269191c92Caf3cD7723F116c85e6E9bf55933",
+      "liquidityRouter": "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB",
+      "multiServiceStakeManager": "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
+      "liquidityVault": "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690",
       "federatedLiquidity": ""
     },
     "fees": {
@@ -177,16 +177,16 @@
       "nodeRegistry": ""
     },
     "training": {
-      "coordinator": "0x34B40BA116d5Dec75548a9e9A8f15411461E8c70",
-      "rewards": "0x34B40BA116d5Dec75548a9e9A8f15411461E8c70",
+      "coordinator": "0xfaAddC93baf78e89DCf37bA67943E1bE8F37Bb8c",
+      "rewards": "0xfaAddC93baf78e89DCf37bA67943E1bE8F37Bb8c",
       "modelRegistry": "",
       "teeRegistry": "",
       "aiDirector": ""
     },
     "agents": {
       "agent0Registry": "",
-      "vault": "0x4b6aB5F819A515382B0dEB6935D793817bB4af28",
-      "roomRegistry": "0xCace1b78160AE76398F486c8a18044da0d66d86D"
+      "vault": "0xc96304e3c037f81dA488ed9dEa1D8F2a48278a75",
+      "roomRegistry": "0x34B40BA116d5Dec75548a9e9A8f15411461E8c70"
     },
     "cloud": {
       "serviceRegistry": "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
@@ -198,15 +198,15 @@
       "feeConfig": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0"
     },
     "vpn": {
-      "registry": "0x18E317A7D70d8fBf8e6E893616b52390EbBdb629"
+      "registry": "0xc0F115A19107322cFBf1cDBC7ea011C19EbDB4F8"
     },
     "otc": {},
     "staking": {
-      "rpcProviderRegistry": "0xD5ac451B0c50B9476107823Af206eD814a2e2580"
+      "rpcProviderRegistry": "0xD0141E899a65C95a556fE2B27e5982A6DE7fDD7A"
     },
     "distributor": {
-      "airdropManager": "0x07882Ae1ecB7429a84f1D53048d35c4bB2056877",
-      "feeDistributor": "0xD0141E899a65C95a556fE2B27e5982A6DE7fDD7A",
+      "airdropManager": "0x3347B4d90ebe72BeFb30444C9966B2B990aE9FcB",
+      "feeDistributor": "0x276C216D241856199A83bf27b2286659e5b877D3",
       "appFeeRegistry": ""
     },
     "amm": {
@@ -228,7 +228,7 @@
       "weth": "0x4200000000000000000000000000000000000006"
     },
     "registry": {
-      "identity": "",
+      "identity": "0x712516e61C8B383dF4A63CFe83d7701Bce54B03e",
       "app": "",
       "node": "",
       "token": "",
@@ -280,7 +280,8 @@
       "cronOrchestrator": ""
     },
     "payments": {
-      "feeConfig": "0x2a810409872AfC346F9B5b26571Fd6eC42EA4849"
+      "feeConfig": "0x2a810409872AfC346F9B5b26571Fd6eC42EA4849",
+      "x402Facilitator": "0x62561FfEa8177B64f60755D1F5Bd78cb2A730e47"
     },
     "commerce": {
       "authCaptureEscrow": "",
@@ -295,12 +296,13 @@
       "stateView": ""
     },
     "compute": {
-      "registry": "",
+      "registry": "0x14e73B53d6703681116ACD323A126F3ef16456d5",
       "ledgerManager": "",
       "inferenceServing": "",
       "staking": "",
       "workerRegistry": "",
-      "cronTriggerRegistry": ""
+      "cronTriggerRegistry": "",
+      "dwsMarketplace": "0x96b238A30F95e9B0f34Bc82c5B55725531786f60"
     },
     "sequencer": {
       "registry": "",
@@ -372,7 +374,13 @@
       "aiDirector": ""
     },
     "agents": {
-      "agent0Registry": ""
+      "agent0Registry": "",
+      "vault": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
+      "roomRegistry": "0x71C95911E9a5D330f4D621842EC243EE1343292e",
+      "triggerRegistry": "0x948B3c65b89DF0B4894ABE91E6D02FE579834F8F"
+    },
+    "cloud": {
+      "serviceRegistry": "0xbCF26943C0197d2eE0E5D05c716Be60cc2761508"
     }
   },
   "mainnet": {

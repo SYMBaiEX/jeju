@@ -505,6 +505,18 @@ export const intentState = {
 }
 
 export const solverState = {
+  async delete(address: string): Promise<void> {
+    const addr = address.toLowerCase()
+    const cache = getCache()
+    const client = await getSQLitClient()
+    await client.exec(
+      'DELETE FROM solvers WHERE address = ?',
+      [addr],
+      SQLIT_DATABASE_ID,
+    )
+    await cache.delete(`solver:${addr}`)
+  },
+
   async save(solver: Solver): Promise<void> {
     const row = solverToRow(solver)
     const cache = getCache()

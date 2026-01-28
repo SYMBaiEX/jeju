@@ -26,8 +26,23 @@ interface DatabaseState {
   top: HashAndHeight[]
 }
 
-// Entity class type
-type EntityClass<E> = { new (...args: unknown[]): E; name?: string }
+type EntityRef = { id: string }
+type EntityValue =
+  | string
+  | number
+  | boolean
+  | null
+  | bigint
+  | Date
+  | Uint8Array
+  | EntityRef
+  | EntityValue[]
+  | { [key: string]: EntityValue }
+
+type EntityRecord = Record<string, EntityValue>
+
+// Entity class type (TypeORM entities typically accept a partial initializer)
+type EntityClass<E> = { new (init?: Partial<E>): E; name?: string }
 
 // Minimal Store interface for our use case
 export interface SQLitStoreInterface {
@@ -395,7 +410,7 @@ export class SQLitDatabase {
 class SQLitStore implements SQLitStoreInterface {
   private client: SQLitClient
   private databaseId: string
-  private pendingWrites: Map<string, Record<string, unknown>[]> = new Map()
+  private pendingWrites: Map<string, EntityRecord[]> = new Map()
 
   constructor(client: SQLitClient, databaseId: string) {
     this.client = client
@@ -407,7 +422,8 @@ class SQLitStore implements SQLitStoreInterface {
     if (entities.length === 0) return
 
     for (const e of entities) {
-      const entityObj = e as Record<string, unknown>
+      if (!e || typeof e !== 'object') continue
+      const entityObj = e as EntityRecord
       const entityCtor = entityObj.constructor as EntityClass<E>
       const tableName = this.getTableName(entityCtor, entityObj)
 
@@ -437,7 +453,8 @@ class SQLitStore implements SQLitStoreInterface {
     if (entities.length === 0) return
 
     for (const e of entities) {
-      const entityObj = e as Record<string, unknown>
+      if (!e || typeof e !== 'object') continue
+      const entityObj = e as EntityRecord
       const entityCtor = entityObj.constructor as EntityClass<E>
       const tableName = this.getTableName(entityCtor, entityObj)
 
@@ -487,11 +504,13 @@ class SQLitStore implements SQLitStoreInterface {
       sql += ` LIMIT ${options.take}`
     }
 
-    const result = await this.client.query(sql, params, this.databaseId)
-    // Hydrate all rows into proper entity instances
-    return result.rows.map((row) =>
-      this.hydrateEntity(entityClass, row as Record<string, unknown>),
+    const result = await this.client.query<Record<string, QueryParam>>(
+      sql,
+      params,
+      this.databaseId,
     )
+    // Hydrate all rows into proper entity instances
+    return result.rows.map((row) => this.hydrateEntity(entityClass, row))
   }
 
   async get<E>(
@@ -499,7 +518,7 @@ class SQLitStore implements SQLitStoreInterface {
     id: string,
   ): Promise<E | undefined> {
     const tableName = this.getTableName(entityClass)
-    const result = await this.client.query(
+    const result = await this.client.query<Record<string, QueryParam>>(
       `SELECT * FROM "${tableName}" WHERE id = ? LIMIT 1`,
       [id],
       this.databaseId,
@@ -508,7 +527,7 @@ class SQLitStore implements SQLitStoreInterface {
     if (!row) return undefined
 
     // Hydrate the raw row into a proper entity instance
-    return this.hydrateEntity(entityClass, row as Record<string, unknown>)
+    return this.hydrateEntity(entityClass, row)
   }
 
   async count<E>(
@@ -553,13 +572,13 @@ class SQLitStore implements SQLitStoreInterface {
    */
   private hydrateEntity<E>(
     entityClass: EntityClass<E>,
-    row: Record<string, unknown>,
+    row: Record<string, QueryParam>,
   ): E {
     // Convert snake_case columns back to camelCase
     const toCamelCase = (str: string): string =>
       str.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 
-    const props: Record<string, unknown> = {}
+    const props: Record<string, EntityValue> = {}
 
     for (const [key, value] of Object.entries(row)) {
       const camelKey = toCamelCase(key)
@@ -585,7 +604,7 @@ class SQLitStore implements SQLitStoreInterface {
       else if (key.endsWith('_id')) {
         const refKey = camelKey.replace(/Id$/, '')
         // Store just the id as a reference object for FK relationships
-        props[refKey] = value !== null ? { id: value } : null
+        props[refKey] = value !== null ? { id: String(value) } : null
       } else {
         props[camelKey] = value
       }
@@ -603,7 +622,7 @@ class SQLitStore implements SQLitStoreInterface {
   // Handles relations (from -> from_id, block -> block_id, etc.)
   private mapPropertyToColumn(prop: string, tableName: string): string | null {
     // Relation mappings - convert relation properties to _id columns
-    // Note: Some relations don't exist in schema and should be filtered out
+    // Some relations don't exist in schema and should be filtered out
     const relationMappings: Record<string, string | null> = {
       from: 'from_id',
       to: 'to_id',
@@ -788,7 +807,7 @@ class SQLitStore implements SQLitStoreInterface {
         'signature', // Maps from eventSignature property
         'contract_type',
         'args',
-        // Note: address, block, transaction, log, timestamp relations are not stored as columns
+        // address, block, transaction, log, timestamp relations are not stored as columns
       ],
       token_transfer: [
         'id',
@@ -885,7 +904,7 @@ class SQLitStore implements SQLitStoreInterface {
 
   private async batchUpsert(
     tableName: string,
-    entities: Record<string, unknown>[],
+    entities: EntityRecord[],
   ): Promise<void> {
     if (entities.length === 0) return
 
@@ -894,27 +913,27 @@ class SQLitStore implements SQLitStoreInterface {
       str.replace(/([a-z\d])([A-Z])/g, '$1_$2').toLowerCase()
 
     // Helper to check if a value is an entity (FK reference)
-    const isEntityRef = (val: unknown): val is { id: string } =>
-      typeof val === 'object' &&
-      val !== null &&
-      !Array.isArray(val) &&
-      !Buffer.isBuffer(val) &&
-      !(val instanceof Uint8Array) &&
-      !(val instanceof Date) &&
-      'id' in val &&
-      typeof (val as Record<string, unknown>).id === 'string'
+    const isEntityRef = (val: EntityValue): val is EntityRef => {
+      if (typeof val !== 'object' || val === null) return false
+      if (Array.isArray(val)) return false
+      if (val instanceof Uint8Array) return false
+      if (val instanceof Date) return false
+      if (Buffer.isBuffer(val)) return false
+      const record = val as Record<string, EntityValue>
+      return typeof record.id === 'string'
+    }
 
     // Helper to check if a value is an array of entities (OneToMany)
-    const isEntityArray = (val: unknown): boolean => {
+    const isEntityArray = (val: EntityValue): boolean => {
       if (!Array.isArray(val)) return false
       if (val.length === 0) return false
       // Check first non-null item
-      const first = val.find((v) => v !== null && v !== undefined)
-      return first && isEntityRef(first)
+      const first = val.find((v) => v !== null)
+      return first !== undefined && isEntityRef(first)
     }
 
     // Helper to serialize primitive arrays (not entity arrays)
-    const serializePrimitiveArray = (val: unknown[]): string => {
+    const serializePrimitiveArray = (val: EntityValue[]): string => {
       return JSON.stringify(
         val.map((v) => (typeof v === 'bigint' ? v.toString() : v)),
       )
@@ -1316,7 +1335,7 @@ class SQLitStore implements SQLitStoreInterface {
 
   private getTableName<E>(
     entityClass: EntityClass<E>,
-    entity?: Record<string, unknown>,
+    entity?: EntityRecord,
   ): string {
     const name = entityClass.name ?? 'unknown'
 

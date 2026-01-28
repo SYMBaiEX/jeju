@@ -3,7 +3,6 @@
  * Provides access to API keys and private keys via env vars or vault
  */
 
-import { getCurrentNetwork, isProductionEnv } from '@jejunetwork/config'
 import type { Address, Hex } from 'viem'
 
 const secretCache = new Map<string, string>()

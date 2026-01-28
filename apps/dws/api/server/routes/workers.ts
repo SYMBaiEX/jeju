@@ -94,13 +94,14 @@ export function getSharedWorkerRegistry(): WorkerRegistryService | null {
  */
 export async function getOrLoadWorkerPublic(
   functionId: string,
+  env?: Record<string, string>,
 ): Promise<WorkerFunction | null> {
   if (!sharedRuntime || !sharedBackend) {
     console.error('[Workers] Runtime or backend not initialized')
     return null
   }
 
-  return getOrLoadWorker(functionId, sharedBackend)
+  return getOrLoadWorker(functionId, sharedBackend, env)
 }
 
 /**
@@ -108,6 +109,22 @@ export async function getOrLoadWorkerPublic(
  */
 function isIPFSCid(str: string): boolean {
   return str.startsWith('Qm') || str.startsWith('bafy')
+}
+
+async function applyWorkerEnv(
+  worker: WorkerFunction,
+  env?: Record<string, string>,
+): Promise<void> {
+  if (!env || Object.keys(env).length === 0) {
+    return
+  }
+
+  if (Object.keys(worker.env).length > 0) {
+    return
+  }
+
+  worker.env = env
+  await dwsWorkerState.save(worker)
 }
 
 /**
@@ -122,6 +139,7 @@ function isIPFSCid(str: string): boolean {
 async function getOrLoadWorker(
   functionId: string,
   backend: BackendManager,
+  env?: Record<string, string>,
 ): Promise<WorkerFunction | null> {
   const registry = getWorkerRegistry()
   const runtime = sharedRuntime
@@ -134,22 +152,37 @@ async function getOrLoadWorker(
   // First check local runtime memory (fastest path)
   const localFn = runtime.getFunction(functionId)
   if (localFn) {
+    await applyWorkerEnv(localFn, env)
     return localFn
   }
 
   // Use registry for multi-tier lookup
   const result = await registry.getWorker(functionId)
   if (result) {
+    await applyWorkerEnv(result.worker, env)
     console.log(
       `[Workers] Loaded worker ${result.worker.name} from ${result.source} (${result.loadTimeMs}ms, coldStart=${result.coldStart})`,
     )
     return result.worker
   }
 
+  // Force a persistence sync once to catch recent deployments
+  const syncResult = await registry.syncFromPersistence()
+  if (syncResult.loaded > 0 || syncResult.skipped > 0) {
+    const retry = await registry.getWorker(functionId)
+    if (retry) {
+      console.log(
+        `[Workers] Loaded worker ${retry.worker.name} after sync (${retry.source})`,
+      )
+      return retry.worker
+    }
+  }
+
   // If functionId looks like a CID, try CID-based lookup
   if (isIPFSCid(functionId)) {
     const cidResult = await registry.getWorkerByCid(functionId)
     if (cidResult) {
+      await applyWorkerEnv(cidResult.worker, env)
       console.log(
         `[Workers] Loaded worker by CID from ${cidResult.source} (${cidResult.loadTimeMs}ms)`,
       )
@@ -158,7 +191,7 @@ async function getOrLoadWorker(
 
     // CID not in database - deploy fresh from IPFS
     console.log(`[Workers] Deploying new worker from CID: ${functionId}`)
-    const deployed = await deployFromCid(runtime, backend, functionId)
+    const deployed = await deployFromCid(runtime, backend, functionId, env)
     return deployed
   }
 
@@ -173,6 +206,7 @@ async function deployFromCid(
   runtime: WorkerRuntime,
   backend: BackendManager,
   cid: string,
+  env?: Record<string, string>,
 ): Promise<WorkerFunction> {
   const registry = getWorkerRegistry()
 
@@ -211,7 +245,7 @@ async function deployFromCid(
     codeCid: cid,
     memory: 512,
     timeout: 60000,
-    env: {},
+    env: env ? env : {},
     status: 'active',
     version: 1,
     createdAt: Date.now(),
@@ -916,7 +950,7 @@ export function createWorkersRouter(backend: BackendManager) {
             body: null,
           }
 
-          const response = await runtime.invokeHTTP(fn.id, event)
+          const response = await runtime.invokeHTTP(fn.id, event, fn)
 
           return new Response(response.body, {
             status: response.statusCode,
@@ -958,7 +992,7 @@ export function createWorkersRouter(backend: BackendManager) {
             body: await request.text(),
           }
 
-          const response = await runtime.invokeHTTP(fn.id, event)
+          const response = await runtime.invokeHTTP(fn.id, event, fn)
 
           return new Response(response.body, {
             status: response.statusCode,
@@ -1000,7 +1034,7 @@ export function createWorkersRouter(backend: BackendManager) {
             body: await request.text(),
           }
 
-          const response = await runtime.invokeHTTP(fn.id, event)
+          const response = await runtime.invokeHTTP(fn.id, event, fn)
 
           return new Response(response.body, {
             status: response.statusCode,
@@ -1042,7 +1076,7 @@ export function createWorkersRouter(backend: BackendManager) {
             body: await request.text(),
           }
 
-          const response = await runtime.invokeHTTP(fn.id, event)
+          const response = await runtime.invokeHTTP(fn.id, event, fn)
 
           return new Response(response.body, {
             status: response.statusCode,
@@ -1084,7 +1118,7 @@ export function createWorkersRouter(backend: BackendManager) {
             body: await request.text(),
           }
 
-          const response = await runtime.invokeHTTP(fn.id, event)
+          const response = await runtime.invokeHTTP(fn.id, event, fn)
 
           return new Response(response.body, {
             status: response.statusCode,

@@ -301,7 +301,7 @@ function dwsWorkerToDeployed(
 
 export function createCLIRoutes() {
   return (
-    new Elysia()
+    new Elysia({ prefix: '/cli' })
       // ========================================
       // Health Check Endpoint
       // ========================================

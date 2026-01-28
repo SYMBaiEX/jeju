@@ -516,8 +516,8 @@ export const monitoringConfig: AppLoadTestConfig = {
 export const monitoringA2aConfig: AppLoadTestConfig = {
   name: 'monitoring-a2a',
   description: 'Monitoring A2A server with Prometheus integration',
-  baseUrl: 'http://localhost:9091',
-  port: 9091,
+  baseUrl: 'http://localhost:3003',
+  port: 3003,
   healthEndpoint: '/.well-known/agent-card.json',
   endpoints: [
     {

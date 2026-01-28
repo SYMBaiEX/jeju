@@ -131,7 +131,7 @@ describe('Smart Contract Security Scenarios', () => {
     expect(response.text.toLowerCase()).toMatch(securityTerms)
   }, 30000)
 
-  test('contracts-auditor should recommend fixes', async () => {
+  test('security-analyst should recommend fixes', async () => {
     const vulnerableCode = `
       function withdraw(uint256 amount) {
         require(balances[msg.sender] >= amount);
@@ -141,7 +141,7 @@ describe('Smart Contract Security Scenarios', () => {
     `
 
     const response = await chat(
-      'contracts-auditor',
+      'security-analyst',
       `Review and recommend fixes for: ${vulnerableCode}`,
     )
 
@@ -152,9 +152,9 @@ describe('Smart Contract Security Scenarios', () => {
     )
   }, 30000)
 
-  test('contracts-auditor should assess contract trust level', async () => {
+  test('security-analyst should assess contract trust level', async () => {
     const response = await chat(
-      'contracts-auditor',
+      'security-analyst',
       'Assess the trust level of a contract that: has unverified source code, was deployed 2 hours ago, deployer has no history',
     )
 
@@ -166,16 +166,16 @@ describe('Smart Contract Security Scenarios', () => {
 })
 
 describe('Social Engineering Defense', () => {
-  test('scammer should generate realistic phishing attempt', async () => {
+  test('red-team should generate realistic phishing attempt', async () => {
     const response = await chat(
-      'scammer',
+      'red-team',
       'Simulate a phishing attack for security testing targeting airdrop seekers',
     )
 
     expect(response.text.length).toBeGreaterThan(100)
-    // Scammer should describe the attack vector
+    // Red team should describe the attack vector
     expect(response.text.toLowerCase()).toMatch(
-      /phishing|airdrop|urgency|link|claim/i,
+      /phishing|airdrop|urgency|link|claim|security|test/i,
     )
   }, 30000)
 

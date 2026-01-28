@@ -15,6 +15,7 @@ import {
   type Hash,
   type HttpTransport,
   http,
+  parseEventLogs,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import {
@@ -1091,15 +1092,17 @@ export class DAOService {
    * Initialize KMS for secure threshold signing
    * Call this in production before any write operations
    */
-  async initializeKMS(operatorAddress: Address): Promise<void> {
+  async initializeKMS(operatorAddress?: Address): Promise<void> {
     const walletClient = await createKMSHttpWalletClient({
-      address: operatorAddress,
+      ...(operatorAddress
+        ? { address: operatorAddress }
+        : { serviceId: 'autocrat-operator' }),
       chain: this.chain,
       rpcUrl: this.config.rpcUrl,
     })
     this.walletClient = walletClient as ViemWalletClient
     console.log(
-      `[DAOService] KMS initialized for ${operatorAddress} (${walletClient.account?.type || 'local'})`,
+      `[DAOService] KMS initialized for ${operatorAddress ?? 'autocrat-operator'} (${walletClient.account?.type || 'local'})`,
     )
   }
 
@@ -1382,47 +1385,89 @@ export class DAOService {
     manifestCid: string
     directorPersona: DirectorPersona
     governanceParams: GovernanceParams
-  }): Promise<Hash> {
+  }): Promise<{ hash: Hash; daoId: `0x${string}` }> {
     if (!this.walletClient) {
       throw new Error('Wallet client not initialized')
     }
+    const account = this.walletClient.account
+    if (!account) {
+      throw new Error('Wallet client account not initialized')
+    }
 
-    const hash = await this.walletClient.writeContract({
+    const args = [
+      params.name,
+      params.displayName,
+      params.description,
+      params.treasury,
+      params.manifestCid,
+      {
+        name: params.directorPersona.name,
+        pfpCid: params.directorPersona.pfpCid,
+        description: params.directorPersona.description,
+        personality: params.directorPersona.personality,
+        traits: params.directorPersona.traits,
+        isHuman: params.directorPersona.isHuman,
+        humanAddress:
+          params.directorPersona.humanAddress ??
+          '0x0000000000000000000000000000000000000000',
+        agentId: BigInt(params.directorPersona.agentId ?? 0),
+        decisionFallbackDays: BigInt(
+          params.directorPersona.decisionFallbackDays ?? 7,
+        ),
+      },
+      {
+        minQualityScore: BigInt(params.governanceParams.minQualityScore),
+        boardVotingPeriod: BigInt(params.governanceParams.boardVotingPeriod),
+        gracePeriod: BigInt(params.governanceParams.gracePeriod),
+        minProposalStake: BigInt(params.governanceParams.minProposalStake),
+        quorumBps: BigInt(params.governanceParams.quorumBps),
+      },
+    ] as const
+
+    const simulation = await this.publicClient.simulateContract({
+      account: account.address,
       address: this.config.daoRegistryAddress,
       abi: DAORegistryABI,
       functionName: 'createDAO',
-      args: [
-        params.name,
-        params.displayName,
-        params.description,
-        params.treasury,
-        params.manifestCid,
-        {
-          name: params.directorPersona.name,
-          pfpCid: params.directorPersona.pfpCid,
-          description: params.directorPersona.description,
-          personality: params.directorPersona.personality,
-          traits: params.directorPersona.traits,
-          isHuman: params.directorPersona.isHuman,
-          humanAddress:
-            params.directorPersona.humanAddress ??
-            '0x0000000000000000000000000000000000000000',
-          agentId: BigInt(params.directorPersona.agentId ?? 0),
-          decisionFallbackDays: BigInt(
-            params.directorPersona.decisionFallbackDays ?? 7,
-          ),
-        },
-        {
-          minQualityScore: BigInt(params.governanceParams.minQualityScore),
-          boardVotingPeriod: BigInt(params.governanceParams.boardVotingPeriod),
-          gracePeriod: BigInt(params.governanceParams.gracePeriod),
-          minProposalStake: BigInt(params.governanceParams.minProposalStake),
-          quorumBps: BigInt(params.governanceParams.quorumBps),
-        },
-      ],
+      args,
     })
 
-    return hash
+    const gasEstimate = await this.publicClient.estimateContractGas({
+      account: account.address,
+      address: this.config.daoRegistryAddress,
+      abi: DAORegistryABI,
+      functionName: 'createDAO',
+      args,
+    })
+
+    const gasLimit = (gasEstimate * 12n) / 10n
+
+    const hash = await this.walletClient.writeContract({
+      account,
+      ...simulation.request,
+      gas: gasLimit,
+    })
+
+    return { hash, daoId: simulation.result as `0x${string}` }
+  }
+
+  async getDaoIdFromReceipt(txHash: Hash): Promise<`0x${string}`> {
+    const receipt = await this.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    })
+    const logs = parseEventLogs({
+      abi: DAORegistryABI,
+      logs: receipt.logs,
+      eventName: 'DAOCreated',
+    })
+    if (logs.length === 0) {
+      throw new Error('DAOCreated event not found in transaction receipt')
+    }
+    const daoId = logs[0].args.daoId
+    if (!daoId) {
+      throw new Error('DAOCreated event missing daoId')
+    }
+    return daoId as `0x${string}`
   }
 
   async setDirectorPersona(
@@ -2085,6 +2130,54 @@ let daoServiceInstance: DAOService | null = null
 
 export function createDAOService(config: DAOServiceConfig): DAOService {
   daoServiceInstance = new DAOService(config)
+  return daoServiceInstance
+}
+
+const PRIVATE_KEY_REGEX = /^0x[a-fA-F0-9]{64}$/
+const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
+const isAddress = (value: string): value is Address => ADDRESS_REGEX.test(value)
+
+const isPrivateKey = (value: string): boolean => PRIVATE_KEY_REGEX.test(value)
+
+let daoServiceInit: Promise<DAOService> | null = null
+
+export async function getOrCreateDAOService(
+  config: DAOServiceConfig,
+  operatorKey?: string,
+): Promise<DAOService> {
+  if (daoServiceInstance) return daoServiceInstance
+  if (daoServiceInit) return daoServiceInit
+
+  daoServiceInit = (async () => {
+    if (operatorKey) {
+      if (isPrivateKey(operatorKey)) {
+        const service = createDAOService({
+          ...config,
+          privateKey: operatorKey,
+        })
+        return service
+      }
+
+      if (isAddress(operatorKey)) {
+        const service = await DAOService.create({
+          ...config,
+          operatorAddress: operatorKey,
+        })
+        return service
+      }
+    }
+
+    const { getOperatorSigner } = await import('./secrets')
+    const signer = await getOperatorSigner()
+    const service = await DAOService.create({
+      ...config,
+      operatorAddress: signer.getAddress(),
+    })
+    return service
+  })()
+
+  daoServiceInstance = await daoServiceInit
   return daoServiceInstance
 }
 

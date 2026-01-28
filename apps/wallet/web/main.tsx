@@ -1,5 +1,5 @@
 import { OAuth3Provider } from '@jejunetwork/auth/react'
-import { getCurrentNetwork, getRpcUrl } from '@jejunetwork/config'
+import { getCurrentNetwork, getOAuth3Url, getRpcUrl } from '@jejunetwork/config'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -81,7 +81,11 @@ if (root) {
                     ? jejuTestnet.id
                     : networkLocalnet.id,
               rpcUrl: getRpcUrl(NETWORK),
+              teeAgentUrl: getOAuth3Url(NETWORK),
+              network: NETWORK,
+              decentralized: NETWORK !== 'localnet',
             }}
+            autoConnect={true}
           >
             <App />
           </OAuth3Provider>

@@ -100,7 +100,10 @@ test.describe('DAO Full Flow E2E', () => {
     await page.waitForLoadState('networkidle')
 
     // Connect wallet
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Verify we're on the create page
     await expect(
@@ -123,7 +126,10 @@ test.describe('DAO Full Flow E2E', () => {
 
     await page.goto(`${AUTOCRAT_URL}/create`)
     await page.waitForLoadState('networkidle')
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Fill in basics
     await page.fill('input#dao-slug', TEST_DAO.name)
@@ -168,7 +174,10 @@ test.describe('DAO Full Flow E2E', () => {
 
     await page.goto(`${AUTOCRAT_URL}/create`)
     await page.waitForLoadState('networkidle')
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Fill step 1 and continue
     await page.fill('input#dao-slug', TEST_DAO.name)
@@ -219,7 +228,10 @@ test.describe('DAO Full Flow E2E', () => {
 
     await page.goto(`${AUTOCRAT_URL}/create`)
     await page.waitForLoadState('networkidle')
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to Board step
     await page.fill('input#dao-slug', TEST_DAO.name)
@@ -265,7 +277,10 @@ test.describe('DAO Full Flow E2E', () => {
 
     await page.goto(`${AUTOCRAT_URL}/create`)
     await page.waitForLoadState('networkidle')
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to Governance step
     await page.fill('input#dao-slug', TEST_DAO.name)
@@ -319,7 +334,10 @@ test.describe('DAO Full Flow E2E', () => {
 
     await page.goto(`${AUTOCRAT_URL}/create`)
     await page.waitForLoadState('networkidle')
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Fill all steps
     await page.fill('input#dao-slug', TEST_DAO.name)
@@ -495,7 +513,10 @@ test.describe('Proposal Flow (requires existing DAO)', () => {
     await page.goto(`${AUTOCRAT_URL}/dao/jeju/proposals/new`)
     await page.waitForLoadState('networkidle')
 
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Fill proposal form
     await page.fill('input[name="title"]', TEST_PROPOSAL.title)

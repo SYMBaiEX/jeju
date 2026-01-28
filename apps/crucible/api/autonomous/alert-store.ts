@@ -22,8 +22,8 @@ export interface AlertStoreStats {
 }
 
 const SEVERITY_ESCALATION_MS: Record<string, number> = {
-  P0: 5 * 60 * 1000,   // 5 min
-  P1: 15 * 60 * 1000,  // 15 min
+  P0: 5 * 60 * 1000, // 5 min
+  P1: 15 * 60 * 1000, // 15 min
   P2: 0,
   P3: 0,
 }
@@ -41,8 +41,9 @@ class AlertStore {
     this.alerts.set(alert.id, alert)
 
     if (this.alerts.size > this.config.maxAlerts) {
-      const oldest = [...this.alerts.entries()]
-        .sort((a, b) => a[1].timestamp - b[1].timestamp)[0]
+      const oldest = [...this.alerts.entries()].sort(
+        (a, b) => a[1].timestamp - b[1].timestamp,
+      )[0]
       if (oldest) this.alerts.delete(oldest[0])
     }
   }
@@ -62,13 +63,13 @@ class AlertStore {
 
   getUnacknowledgedAlerts(): Alert[] {
     return [...this.alerts.values()]
-      .filter(a => a.requiresAck && !a.acknowledgedAt)
+      .filter((a) => a.requiresAck && !a.acknowledgedAt)
       .sort((a, b) => a.timestamp - b.timestamp)
   }
 
   getAlertsForEscalation(): Alert[] {
     const now = Date.now()
-    return [...this.alerts.values()].filter(alert => {
+    return [...this.alerts.values()].filter((alert) => {
       if (alert.acknowledgedAt) return false
       if (!alert.requiresAck) return false
 
@@ -76,7 +77,7 @@ class AlertStore {
       if (!timeoutMs) return false
 
       const lastTime = alert.lastEscalatedAt ?? alert.timestamp
-      return (now - lastTime) >= timeoutMs
+      return now - lastTime >= timeoutMs
     })
   }
 
@@ -101,7 +102,8 @@ class AlertStore {
 
     return {
       totalAlerts: alerts.length,
-      unacknowledged: alerts.filter(a => a.requiresAck && !a.acknowledgedAt).length,
+      unacknowledged: alerts.filter((a) => a.requiresAck && !a.acknowledgedAt)
+        .length,
       bySeverity,
       byCategory,
     }

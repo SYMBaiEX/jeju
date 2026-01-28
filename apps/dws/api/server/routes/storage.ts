@@ -80,6 +80,20 @@ function getContentType(
   return 'file'
 }
 
+function shouldModerateUpload(filename: string, category: string): boolean {
+  if (category !== 'app') return true
+  const lower = filename.toLowerCase()
+  return !(
+    lower.endsWith('.js') ||
+    lower.endsWith('.css') ||
+    lower.endsWith('.html') ||
+    lower.endsWith('.json') ||
+    lower.endsWith('.map') ||
+    lower.endsWith('.txt') ||
+    lower.endsWith('.svg')
+  )
+}
+
 // Singleton pipeline with reputation provider
 let moderationPipeline: ContentModerationPipeline | null = null
 
@@ -97,9 +111,7 @@ function getModerationPipeline(): ContentModerationPipeline {
         )
       }
       if (process.env.AWS_SECRET_ACCESS_KEY) {
-        console.warn(
-          '[Storage] WARNING: Using AWS credentials from env. Consider using IAM roles or KMS.',
-        )
+        // Removed - AWS credentials should not be used in decentralized deployment
       }
     }
 
@@ -111,15 +123,6 @@ function getModerationPipeline(): ContentModerationPipeline {
       hive: process.env.HIVE_API_KEY
         ? { apiKey: process.env.HIVE_API_KEY }
         : undefined,
-      awsRekognition:
-        process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-          ? {
-              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-              region: process.env.AWS_REGION ?? 'us-east-1',
-            }
-          : undefined,
-      // Cloudflare moderation provider is not yet supported in PipelineConfig
     })
   }
   return moderationPipeline
@@ -290,6 +293,10 @@ export function createStorageRouter(_backend?: BackendManager) {
           return { error: 'No file provided' }
         }
 
+        // Get filename from File object or fallback to 'upload'
+        // (Blob uploads may not have .name set in some environments)
+        const filename = file.name || 'upload'
+
         const tier = getFormStringOr(formData, 'tier', 'popular')
         const category = getFormStringOr(formData, 'category', 'data')
         const encrypt = formData.get('encrypt') === 'true'
@@ -301,26 +308,28 @@ export function createStorageRouter(_backend?: BackendManager) {
         const content = Buffer.from(await file.arrayBuffer())
 
         // ========== CONTENT MODERATION ==========
-        const moderation = await moderateUpload(
-          content,
-          file.name,
-          senderAddress ?? undefined,
-        )
+        const shouldModerate = shouldModerateUpload(filename, category)
+        const moderation = shouldModerate
+          ? await moderateUpload(content, filename, senderAddress ?? undefined)
+          : null
 
         // Block banned/blocked content
-        if (moderation.action === 'ban' || moderation.action === 'block') {
+        if (
+          moderation &&
+          (moderation.action === 'ban' || moderation.action === 'block')
+        ) {
           set.status = moderation.action === 'ban' ? 451 : 403
           return buildModerationErrorResponse(moderation)
         }
 
         // Add warning header for flagged content
-        if (moderation.action === 'warn') {
+        if (moderation && moderation.action === 'warn') {
           set.headers['X-Moderation-Warning'] =
             `${moderation.primaryCategory}: ${moderation.blockedReason}`
         }
 
         // Queue content that needs review but allow upload
-        if (moderation.action === 'queue') {
+        if (moderation && moderation.action === 'queue') {
           set.headers['X-Moderation-Status'] = 'pending_review'
         }
         // ========================================
@@ -330,7 +339,7 @@ export function createStorageRouter(_backend?: BackendManager) {
           | undefined
 
         const result = await storageManager.upload(content, {
-          filename: file.name,
+          filename,
           tier: tier as ContentTier,
           category: category as ContentCategory,
           encrypt,
@@ -342,7 +351,7 @@ export function createStorageRouter(_backend?: BackendManager) {
           const permanentResult = await storageManager.uploadPermanent(
             content,
             {
-              filename: file.name,
+              filename,
               tier: tier as ContentTier,
               category: category as ContentCategory,
             },
@@ -363,18 +372,20 @@ export function createStorageRouter(_backend?: BackendManager) {
         const content = Buffer.from(await request.arrayBuffer())
 
         // ========== CONTENT MODERATION ==========
-        const moderation = await moderateUpload(
-          content,
-          filename,
-          senderAddress ?? undefined,
-        )
+        const shouldModerate = shouldModerateUpload(filename, category)
+        const moderation = shouldModerate
+          ? await moderateUpload(content, filename, senderAddress ?? undefined)
+          : null
 
-        if (moderation.action === 'ban' || moderation.action === 'block') {
+        if (
+          moderation &&
+          (moderation.action === 'ban' || moderation.action === 'block')
+        ) {
           set.status = moderation.action === 'ban' ? 451 : 403
           return buildModerationErrorResponse(moderation)
         }
 
-        if (moderation.action === 'warn') {
+        if (moderation && moderation.action === 'warn') {
           set.headers['X-Moderation-Warning'] =
             `${moderation.primaryCategory}: ${moderation.blockedReason}`
         }
@@ -446,6 +457,7 @@ export function createStorageRouter(_backend?: BackendManager) {
           return { error: 'No file provided' }
         }
 
+        const filename = file.name || 'upload'
         const tier = getFormStringOr(formData, 'tier', 'popular')
         const category = getFormStringOr(formData, 'category', 'data')
         const content = Buffer.from(await file.arrayBuffer())
@@ -455,7 +467,7 @@ export function createStorageRouter(_backend?: BackendManager) {
         // Permanent uploads require EXTRA strict moderation
         const moderation = await moderateUpload(
           content,
-          file.name,
+          filename,
           senderAddress ?? undefined,
         )
 
@@ -472,7 +484,7 @@ export function createStorageRouter(_backend?: BackendManager) {
         // ========================================
 
         const result = await storageManager.uploadPermanent(content, {
-          filename: file.name,
+          filename,
           tier: tier as ContentTier,
           category: category as ContentCategory,
         })
@@ -668,13 +680,14 @@ export function createStorageRouter(_backend?: BackendManager) {
           return { error: 'No file provided' }
         }
 
+        const filename = file.name || 'file'
         const content = Buffer.from(await file.arrayBuffer())
         const senderAddress = request.headers.get('x-sender-address')
 
         // ========== CONTENT MODERATION ==========
         const moderation = await moderateUpload(
           content,
-          file.name,
+          filename,
           senderAddress ?? undefined,
         )
 
@@ -685,14 +698,14 @@ export function createStorageRouter(_backend?: BackendManager) {
         // ========================================
 
         const result = await storageManager.upload(content, {
-          filename: file.name,
+          filename,
           tier: 'popular',
         })
 
         return {
           Hash: result.cid,
           Size: String(result.size),
-          Name: file.name,
+          Name: filename,
         }
       })
 

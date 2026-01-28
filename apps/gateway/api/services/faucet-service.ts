@@ -18,7 +18,7 @@ import {
   http,
   parseEther,
 } from 'viem'
-import { jejuTestnet } from '../../lib/chains'
+import { getChain } from '../../lib/chains'
 import {
   IDENTITY_REGISTRY_ADDRESS,
   JEJU_TOKEN_ADDRESS,
@@ -60,8 +60,9 @@ const IDENTITY_REGISTRY_ABI = [
 
 initializeState().catch(console.error)
 
+const chain = getChain(JEJU_CHAIN_ID)
 const publicClient = createPublicClient({
-  chain: jejuTestnet,
+  chain,
   transport: http(getRpcUrl(JEJU_CHAIN_ID)),
 })
 
@@ -265,7 +266,7 @@ export async function claimFromFaucet(
         gasPrice,
         chainId: JEJU_CHAIN_ID,
       },
-      chain: jejuTestnet,
+      chain,
     },
     getRpcUrl(JEJU_CHAIN_ID),
   )
@@ -341,7 +342,7 @@ export async function claimGasGrant(address: Address): Promise<GasGrantResult> {
         gasPrice,
         chainId: JEJU_CHAIN_ID,
       },
-      chain: jejuTestnet,
+      chain,
     },
     getRpcUrl(JEJU_CHAIN_ID),
   )

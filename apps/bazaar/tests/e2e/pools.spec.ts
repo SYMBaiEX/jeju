@@ -128,7 +128,7 @@ test.describe('Liquidity Page', () => {
     await expect(page.locator('input[type="number"]').first()).toBeVisible()
   })
 
-  test('shows user positions or connect prompt', async ({ page }) => {
+  test('shows user positions or sign in prompt', async ({ page }) => {
     await navigateTo(page, '/liquidity')
     await page.waitForTimeout(1000)
 
@@ -136,7 +136,8 @@ test.describe('Liquidity Page', () => {
     expect(
       body?.includes('Position') ||
         body?.includes('No positions') ||
-        body?.includes('Connect wallet'),
+        body?.includes('Sign In') ||
+        body?.includes('Use wallet or passkey'),
     ).toBe(true)
   })
 

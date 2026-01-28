@@ -477,28 +477,30 @@ async function runDeployInfra(
   network: NetworkType,
   dryRun: boolean,
 ): Promise<void> {
-  logger.subheader('Infrastructure')
+  logger.subheader('Infrastructure (DWS Contracts)')
+  logger.info('Deploying DWS contracts on-chain (permissionless)')
+  logger.newline()
 
-  const deploymentDir = join(rootDir, 'packages/deployment')
-  if (!existsSync(deploymentDir)) {
-    logger.warn('packages/deployment not found')
+  // Deploy DWS contracts via dws-bootstrap with --skip-apps
+  const dwsBootstrap = join(
+    rootDir,
+    'packages/deployment/scripts/deploy/dws-bootstrap.ts',
+  )
+
+  if (!existsSync(dwsBootstrap)) {
+    logger.error('DWS bootstrap script not found')
     return
   }
 
-  const deployScript = join(deploymentDir, 'scripts/deploy-full.ts')
-  if (existsSync(deployScript)) {
-    logger.step('Deploying...')
-    if (!dryRun) {
-      await execa('bun', ['run', deployScript], {
-        cwd: deploymentDir,
-        stdio: 'inherit',
-        env: { ...process.env, NETWORK: network },
-      })
-    }
-    logger.success('Deployed')
-  } else {
-    logger.warn('No deploy script found')
+  if (!dryRun) {
+    await execa('bun', ['run', dwsBootstrap, '--skip-apps'], {
+      cwd: rootDir,
+      stdio: 'inherit',
+      env: { ...process.env, NETWORK: network },
+    })
   }
+
+  logger.success('DWS contracts deployed')
 }
 
 async function runDeployApps(
@@ -506,9 +508,23 @@ async function runDeployApps(
   network: NetworkType,
   dryRun: boolean,
 ): Promise<void> {
-  logger.subheader('Apps')
+  logger.subheader('Apps (via DWS - Permissionless)')
 
-  logger.step('Building...')
+  // Use DWS bootstrap for permissionless deployment
+  const dwsBootstrap = join(
+    rootDir,
+    'packages/deployment/scripts/deploy/dws-bootstrap.ts',
+  )
+
+  if (!existsSync(dwsBootstrap)) {
+    logger.error('DWS bootstrap script not found')
+    logger.info(
+      'Apps must be deployed via DWS for permissionless decentralized deployment',
+    )
+    return
+  }
+
+  logger.step('Building apps...')
   if (!dryRun) {
     await execa('bun', ['run', 'build'], {
       cwd: rootDir,
@@ -518,22 +534,19 @@ async function runDeployApps(
   }
   logger.success('Built')
 
-  const k8sDir = join(rootDir, 'packages/deployment/kubernetes')
-  const helmfilePath = join(k8sDir, 'helmfile.yaml')
+  logger.step('Deploying via DWS (permissionless)...')
+  logger.info('  - Frontend: IPFS + JNS contenthash')
+  logger.info('  - Backend: DWS Workers (serverless)')
+  logger.info('  - Database: DWS SQLit (provisioned on-demand)')
 
-  if (existsSync(helmfilePath)) {
-    logger.step('Deploying to Kubernetes...')
-    if (!dryRun) {
-      await execa('helmfile', ['sync'], {
-        cwd: k8sDir,
-        stdio: 'inherit',
-        env: { ...process.env, ENVIRONMENT: network },
-      })
-    }
-    logger.success('Deployed')
-  } else {
-    logger.warn('No Kubernetes manifests found')
+  if (!dryRun) {
+    await execa('bun', ['run', dwsBootstrap], {
+      cwd: rootDir,
+      stdio: 'inherit',
+      env: { ...process.env, NETWORK: network },
+    })
   }
+  logger.success('Deployed via DWS')
 }
 
 deployCommand
@@ -883,38 +896,37 @@ deployCommand
 
 deployCommand
   .command('full')
-  .description('Full deployment (terraform, kubernetes, contracts, DWS apps)')
+  .description('Full decentralized deployment (contracts, DWS apps, SQLit)')
   .option(
     '--network <network>',
     'Network: localnet | testnet | mainnet',
     'testnet',
   )
-  .option('--skip-terraform', 'Skip Terraform infrastructure')
-  .option('--skip-kubernetes', 'Skip Kubernetes deployment')
   .option('--skip-contracts', 'Skip contract deployment')
   .option('--skip-dws', 'Skip DWS app deployment')
+  .option('--skip-sqlit', 'Skip SQLit database provisioning')
   .option('--dry-run', 'Simulate without making changes')
   .action(async (options) => {
     const rootDir = findMonorepoRoot()
+
+    logger.header('DECENTRALIZED DEPLOYMENT')
+    logger.keyValue('Network', options.network)
+    logger.info('Deploying via on-chain contracts + DWS')
+    logger.newline()
+
     const scriptPath = join(
       rootDir,
-      'packages/deployment/scripts/deploy/full-deployment.ts',
+      'packages/deployment/scripts/deploy/dws-bootstrap.ts',
     )
 
     if (!existsSync(scriptPath)) {
-      logger.error('Full deployment script not found')
+      logger.error('DWS bootstrap script not found')
       return
     }
 
-    logger.header('FULL DEPLOYMENT')
-    logger.keyValue('Network', options.network)
-    logger.newline()
-
     const args: string[] = []
-    if (options.skipTerraform) args.push('--skip-terraform')
-    if (options.skipKubernetes) args.push('--skip-kubernetes')
     if (options.skipContracts) args.push('--skip-contracts')
-    if (options.skipDws) args.push('--skip-dws')
+    if (options.skipDws) args.push('--skip-apps')
     if (options.dryRun) args.push('--dry-run')
 
     await execa('bun', ['run', scriptPath, ...args], {
@@ -1190,33 +1202,7 @@ deployCommand
     await runDeployScript('board', options.network, options)
   })
 
-deployCommand
-  .command('launchpad')
-  .description('Deploy token launchpad (deprecated)')
-  .option(
-    '--network <network>',
-    'Network: localnet | testnet | mainnet',
-    'localnet',
-  )
-  .action(async () => {
-    logger.error('Launchpad deployment has been deprecated.')
-    logger.info('Use: jeju deploy token --network <network>')
-    process.exit(1)
-  })
-
-deployCommand
-  .command('eil')
-  .description('Deploy Ethereum Intent Layer (use eil-paymaster instead)')
-  .option(
-    '--network <network>',
-    'Network: localnet | testnet | mainnet',
-    'localnet',
-  )
-  .action(async () => {
-    logger.error('EIL deployment has been consolidated.')
-    logger.info('Use: jeju deploy eil-paymaster --network <network>')
-    process.exit(1)
-  })
+// NOTE: 'launchpad' and 'eil' commands removed - use 'deploy token' and 'deploy eil-paymaster' respectively
 
 deployCommand
   .command('eil-paymaster')

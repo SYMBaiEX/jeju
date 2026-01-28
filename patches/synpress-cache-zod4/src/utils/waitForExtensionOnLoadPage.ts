@@ -95,6 +95,64 @@ async function findExtensionPage(context: BrowserContext): Promise<Page | null> 
   return extensionPage || null
 }
 
+function getExtensionIdFromUrl(url: string): string | null {
+  const match = url.match(/^chrome-extension:\/\/([a-z]{32})\//)
+  return match ? match[1] : null
+}
+
+async function openExtensionPage(
+  context: BrowserContext,
+  extensionId: string,
+): Promise<Page | null> {
+  const candidates = [
+    `chrome-extension://${extensionId}/home.html`,
+    `chrome-extension://${extensionId}/popup.html`,
+  ]
+
+  for (const url of candidates) {
+    const page = await context.newPage()
+    await page.goto(url).catch(() => null)
+    if (page.url().startsWith('chrome-extension://')) {
+      return page
+    }
+  }
+
+  return null
+}
+
+async function findOrOpenExtensionPage(
+  context: BrowserContext,
+): Promise<Page | null> {
+  const existing = await findExtensionPage(context)
+  if (existing) {
+    return existing
+  }
+
+  const workers = context.serviceWorkers()
+  for (const worker of workers) {
+    const extensionId = getExtensionIdFromUrl(worker.url())
+    if (extensionId) {
+      const page = await openExtensionPage(context, extensionId)
+      if (page) {
+        return page
+      }
+    }
+  }
+
+  const backgroundPages = context.backgroundPages()
+  for (const page of backgroundPages) {
+    const extensionId = getExtensionIdFromUrl(page.url())
+    if (extensionId) {
+      const opened = await openExtensionPage(context, extensionId)
+      if (opened) {
+        return opened
+      }
+    }
+  }
+
+  return null
+}
+
 /**
  * Waits for the extension page to load and ensures it's not blank or has errors
  */
@@ -122,7 +180,7 @@ export async function waitForExtensionOnLoadPage(context: BrowserContext, extens
       const maxPollingAttempts = Math.floor(EXTENSION_LOAD_TIMEOUT / POLLING_INTERVAL)
 
       while (pollingAttempts < maxPollingAttempts) {
-        extensionPage = await findExtensionPage(context)
+        extensionPage = await findOrOpenExtensionPage(context)
 
         if (extensionPage) {
           console.log(`[WaitForExtensionOnLoadPage] Found extension page after ${pollingAttempts + 1} polling attempts`)

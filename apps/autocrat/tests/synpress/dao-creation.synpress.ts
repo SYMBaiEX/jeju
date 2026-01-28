@@ -55,7 +55,8 @@ test.describe('DAO Creation with Wallet', () => {
 
     // Connect wallet first
     await connectAndVerify(page, metamask, {
-      connectButtonText: 'Connect',
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
     })
 
     // Step 1: Basics
@@ -173,7 +174,7 @@ test.describe('DAO Creation with Wallet', () => {
     await expect(createButton).toBeEnabled()
 
     // Click create (will trigger API call)
-    // Note: In real test with backend, this would create the DAO
+    // In real test with backend, this would create the DAO
     // await createButton.click()
     // await expect(page).toHaveURL(/\/dao\/test-dao/)
   })
@@ -195,7 +196,8 @@ test.describe('DAO Creation with Wallet', () => {
     await page.waitForLoadState('networkidle')
 
     await connectAndVerify(page, metamask, {
-      connectButtonText: 'Connect',
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
     })
 
     // Fill basics
@@ -236,7 +238,8 @@ test.describe('DAO Creation with Wallet', () => {
     await page.waitForLoadState('networkidle')
 
     await connectAndVerify(page, metamask, {
-      connectButtonText: 'Connect',
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
     })
 
     // Fill basics
@@ -284,7 +287,8 @@ test.describe('DAO Creation with Wallet', () => {
     await page.waitForLoadState('networkidle')
 
     await connectAndVerify(page, metamask, {
-      connectButtonText: 'Connect',
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
     })
 
     // Fill all required fields to unlock steps
@@ -320,7 +324,10 @@ test.describe('Board Member Management', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to board step
     await page.getByLabel(/Slug/).fill('board-test')
@@ -355,7 +362,10 @@ test.describe('Board Member Management', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to board step
     await page.getByLabel(/Slug/).fill('add-member-test')
@@ -384,7 +394,10 @@ test.describe('Board Member Management', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to board step
     await page.getByLabel(/Slug/).fill('min-board-test')
@@ -422,7 +435,10 @@ test.describe('Governance Parameters', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to governance step
     await page.getByLabel(/Slug/).fill('gov-defaults-test')
@@ -467,7 +483,10 @@ test.describe('Governance Parameters', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Navigate to governance step
     await page.getByLabel(/Slug/).fill('gov-modify-test')
@@ -506,7 +525,10 @@ test.describe('Error Handling', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Fill all steps
     await page.getByLabel(/Slug/).fill('error-test')
@@ -554,7 +576,10 @@ test.describe('Error Handling', () => {
     )
 
     await page.goto(`${AUTOCRAT_URL}/create`)
-    await connectAndVerify(page, metamask, { connectButtonText: 'Connect' })
+    await connectAndVerify(page, metamask, {
+      connectButtonText: 'Sign In',
+      walletOptionText: 'Connect Wallet',
+    })
 
     // Disconnect network
     await context.setOffline(true)

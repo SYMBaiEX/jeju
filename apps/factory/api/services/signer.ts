@@ -2,9 +2,7 @@ import { getFarcasterHubUrl, isProductionEnv } from '@jejunetwork/config'
 import { FarcasterPoster } from '@jejunetwork/messaging'
 import { createLogger } from '@jejunetwork/shared'
 import { ed25519 } from '@noble/curves/ed25519'
-import { hkdf } from '@noble/hashes/hkdf'
-import { sha256 } from '@noble/hashes/sha256'
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils'
+import { hkdfSync, randomBytes } from 'node:crypto'
 import type { Address, Hex } from 'viem'
 import { getFactoryConfig } from '../config'
 import {
@@ -25,6 +23,32 @@ const HUB_URL = getFarcasterHubUrl()
  * SECURITY: Fails in production if no key is configured.
  * Development uses a derived key for convenience only.
  */
+function bytesToHex(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('hex')
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const normalized = hex.startsWith('0x') ? hex.slice(2) : hex
+  return new Uint8Array(Buffer.from(normalized, 'hex'))
+}
+
+function hkdfSha256(
+  ikm: Uint8Array,
+  salt: Uint8Array,
+  info: Uint8Array,
+  length: number,
+): Uint8Array {
+  return new Uint8Array(
+    hkdfSync(
+      'sha256',
+      Buffer.from(ikm),
+      Buffer.from(salt),
+      Buffer.from(info),
+      length,
+    ),
+  )
+}
+
 function getEncryptionKey(): Uint8Array {
   const config = getFactoryConfig()
 
@@ -46,14 +70,11 @@ function getEncryptionKey(): Uint8Array {
       'Set SIGNER_ENCRYPTION_KEY for proper security.',
   )
 
-  const seed = `factory-signer-dev-${Date.now()}-${randomBytes(8)}`
-  return hkdf(
-    sha256,
-    new TextEncoder().encode(seed),
-    randomBytes(32),
-    new TextEncoder().encode('aes-key'),
-    32,
-  )
+  const seed = `factory-signer-dev-${Date.now()}-${bytesToHex(randomBytes(8))}`
+  const seedBytes = new TextEncoder().encode(seed)
+  const salt = randomBytes(32)
+  const info = new TextEncoder().encode('aes-key')
+  return hkdfSha256(seedBytes, salt, info, 32)
 }
 
 /**
@@ -68,8 +89,7 @@ function encryptPrivateKey(privateKey: Uint8Array): {
 
   // Simple XOR encryption with key derivation for storage
   // In production, use proper AES-GCM via Web Crypto
-  const derivedKey = hkdf(
-    sha256,
+  const derivedKey = hkdfSha256(
     key,
     iv,
     new TextEncoder().encode('encrypt'),
@@ -95,8 +115,7 @@ function decryptPrivateKey(encrypted: string, ivHex: string): Uint8Array {
   const encryptedBytes = hexToBytes(encrypted.replace('0x', ''))
 
   // Reverse the XOR encryption
-  const derivedKey = hkdf(
-    sha256,
+  const derivedKey = hkdfSha256(
     key,
     iv,
     new TextEncoder().encode('encrypt'),
@@ -193,7 +212,7 @@ export async function verifyAndActivateSigner(
   signerPublicKey: Hex,
   signature: Hex,
 ): Promise<boolean> {
-  const success = activateSigner(signerPublicKey, signature)
+  const success = await activateSigner(signerPublicKey, signature)
   if (success) {
     log.info('Activated signer', {
       publicKey: `${signerPublicKey.slice(0, 20)}...`,
@@ -205,15 +224,19 @@ export async function verifyAndActivateSigner(
 /**
  * Get active signer for a user
  */
-export function getActiveSigner(address: Address): FarcasterSignerRow | null {
-  return getFarcasterSigner(address)
+export async function getActiveSigner(
+  address: Address,
+): Promise<FarcasterSignerRow | null> {
+  return await getFarcasterSigner(address)
 }
 
 /**
  * Get all signers for a user
  */
-export function getUserSigners(address: Address): FarcasterSignerRow[] {
-  return listFarcasterSigners(address)
+export async function getUserSigners(
+  address: Address,
+): Promise<FarcasterSignerRow[]> {
+  return await listFarcasterSigners(address)
 }
 
 /**
@@ -237,10 +260,10 @@ export function createPosterFromSigner(
 /**
  * Get active signer with poster instance
  */
-export function getActiveSignerWithPoster(
+export async function getActiveSignerWithPoster(
   address: Address,
-): ActiveSigner | null {
-  const signer = getActiveSigner(address)
+): Promise<ActiveSigner | null> {
+  const signer = await getActiveSigner(address)
   if (!signer) return null
 
   const poster = createPosterFromSigner(signer)
@@ -250,8 +273,8 @@ export function getActiveSignerWithPoster(
 /**
  * Revoke a signer
  */
-export function revokeSigner(signerId: string): boolean {
-  const success = updateSignerState(signerId, 'revoked')
+export async function revokeSigner(signerId: string): Promise<boolean> {
+  const success = await updateSignerState(signerId, 'revoked')
   if (success) {
     log.info('Revoked signer', { signerId })
   }
@@ -261,8 +284,8 @@ export function revokeSigner(signerId: string): boolean {
 /**
  * Check if a user has an active signer
  */
-export function hasActiveSigner(address: Address): boolean {
-  const signer = getActiveSigner(address)
+export async function hasActiveSigner(address: Address): Promise<boolean> {
+  const signer = await getActiveSigner(address)
   return signer !== null && signer.key_state === 'active'
 }
 
@@ -277,8 +300,8 @@ export interface SignerStatus {
   createdAt: number | null
 }
 
-export function getSignerStatus(address: Address): SignerStatus {
-  const signer = getActiveSigner(address)
+export async function getSignerStatus(address: Address): Promise<SignerStatus> {
+  const signer = await getActiveSigner(address)
 
   if (!signer) {
     return {

@@ -29,7 +29,12 @@ export interface MessageStoreStats {
 }
 
 export interface IMessageStore {
-  addMessage(roomId: string, agentId: string, content: string, action?: string): StoredMessage
+  addMessage(
+    roomId: string,
+    agentId: string,
+    content: string,
+    action?: string,
+  ): StoredMessage
   getMessages(roomId: string, opts?: GetMessagesOptions): StoredMessage[]
   getRecentMessages(opts?: GetMessagesOptions): StoredMessage[]
   clearRoom(roomId: string): void
@@ -101,7 +106,12 @@ class MessageStore implements IMessageStore {
     return room
   }
 
-  addMessage(roomId: string, agentId: string, content: string, action?: string): StoredMessage {
+  addMessage(
+    roomId: string,
+    agentId: string,
+    content: string,
+    action?: string,
+  ): StoredMessage {
     this.evictExpiredMessages()
 
     const room = this.getOrCreateRoom(roomId)
@@ -134,8 +144,9 @@ class MessageStore implements IMessageStore {
 
     let messages = room.messages
 
-    if (opts.since) {
-      messages = messages.filter((m) => m.timestamp > opts.since!)
+    if (opts.since !== undefined) {
+      const since = opts.since
+      messages = messages.filter((m) => m.timestamp > since)
     }
 
     if (opts.limit && opts.limit > 0) {
@@ -156,8 +167,9 @@ class MessageStore implements IMessageStore {
 
     let messages = allMessages
 
-    if (opts.since) {
-      messages = messages.filter((m) => m.timestamp > opts.since!)
+    if (opts.since !== undefined) {
+      const since = opts.since
+      messages = messages.filter((m) => m.timestamp > since)
     }
 
     if (opts.limit && opts.limit > 0) {
@@ -197,7 +209,9 @@ class MessageStore implements IMessageStore {
 // Singleton instance
 let instance: MessageStore | null = null
 
-export function getMessageStore(config?: Partial<MessageStoreConfig>): IMessageStore {
+export function getMessageStore(
+  config?: Partial<MessageStoreConfig>,
+): IMessageStore {
   if (!instance) {
     instance = new MessageStore(config)
   }

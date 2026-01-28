@@ -114,15 +114,15 @@ test.describe('Token Creation Form', () => {
     const createButton = page
       .locator('main, [role="main"]')
       .getByRole('button', {
-        name: /Create Token|Connect Wallet|Switch to the network/i,
+        name: /Create Token|Sign In|Switch to the network/i,
       })
       .first()
 
     await expect(createButton).toBeVisible()
     const buttonText = await createButton.textContent()
 
-    if (buttonText?.includes('Connect Wallet')) {
-      expect(buttonText).toContain('Connect Wallet')
+    if (buttonText?.includes('Sign In')) {
+      expect(buttonText).toContain('Sign In')
     } else if (buttonText?.includes('Create Token')) {
       await expect(createButton).toBeDisabled()
     }

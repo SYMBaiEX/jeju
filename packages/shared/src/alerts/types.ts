@@ -5,13 +5,22 @@ export type AlertSeverity = 'P0' | 'P1' | 'P2' | 'P3'
 export const AlertSeveritySchema = z.enum(['P0', 'P1', 'P2', 'P3'])
 
 export const SEVERITY_CONFIG = {
-  P0: { name: 'Critical', requiresAck: true, escalationTimeoutMs: 5 * 60 * 1000 },
+  P0: {
+    name: 'Critical',
+    requiresAck: true,
+    escalationTimeoutMs: 5 * 60 * 1000,
+  },
   P1: { name: 'High', requiresAck: true, escalationTimeoutMs: 15 * 60 * 1000 },
   P2: { name: 'Medium', requiresAck: false, escalationTimeoutMs: 0 },
   P3: { name: 'Low', requiresAck: false, escalationTimeoutMs: 0 },
 } as const
 
-export type AlertCategory = 'infrastructure' | 'security' | 'moderation' | 'defi' | 'system'
+export type AlertCategory =
+  | 'infrastructure'
+  | 'security'
+  | 'moderation'
+  | 'defi'
+  | 'system'
 
 export interface Alert {
   id: string
@@ -32,7 +41,13 @@ export interface Alert {
 export const AlertSchema = z.object({
   id: z.string(),
   severity: AlertSeveritySchema,
-  category: z.enum(['infrastructure', 'security', 'moderation', 'defi', 'system']),
+  category: z.enum([
+    'infrastructure',
+    'security',
+    'moderation',
+    'defi',
+    'system',
+  ]),
   source: z.string(),
   message: z.string(),
   timestamp: z.number(),

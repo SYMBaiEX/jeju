@@ -54,7 +54,7 @@ export function ChatInterface({
     setMessages([])
     setInput('')
     inputRef.current?.focus()
-  }, [characterId])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

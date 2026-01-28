@@ -44,7 +44,6 @@ import {
   type WalletClient,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { base, baseSepolia } from 'viem/chains'
 import type { NetworkType } from '../shared'
 import { getRequiredNetwork } from '../shared'
 
@@ -53,13 +52,31 @@ const CONTRACTS_DIR = join(ROOT, 'packages/contracts')
 const APPS_DIR = join(ROOT, 'apps')
 const DEPLOYMENTS_DIR = join(CONTRACTS_DIR, 'deployments')
 
-// Define localnet chain
+// Define Jeju chains
 const localnet = defineChain({
   id: 31337,
   name: 'Jeju Localnet',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
     default: { http: ['http://localhost:6546'] },
+  },
+})
+
+const jejuTestnet = defineChain({
+  id: 420690,
+  name: 'Jeju Testnet',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://testnet-rpc.jejunetwork.org'] },
+  },
+})
+
+const jejuMainnet = defineChain({
+  id: 420691,
+  name: 'Jeju Mainnet',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.jejunetwork.org'] },
   },
 })
 
@@ -222,9 +239,9 @@ Environment:
   const account = privateKeyToAccount(privateKey as `0x${string}`)
   const chain: Chain =
     network === 'mainnet'
-      ? base
+      ? jejuMainnet
       : network === 'testnet'
-        ? baseSepolia
+        ? jejuTestnet
         : localnet
 
   const publicClient = createPublicClient({
@@ -502,9 +519,13 @@ async function deployDWSContracts(
   privateKey: Hex,
 ): Promise<DWSContracts> {
   const rpcUrl = NETWORK_CONFIG[network].rpcUrl
+  const gasPriceGwei = process.env.DWS_GAS_PRICE_GWEI
 
   // Run forge script
-  const cmd = `cd ${CONTRACTS_DIR} && ARBISCAN_API_KEY=dummy BASESCAN_API_KEY=dummy ETHERSCAN_API_KEY=dummy forge script script/DeployDWS.s.sol:DeployDWS --rpc-url ${rpcUrl} --private-key ${privateKey} --broadcast --legacy 2>&1`
+  const gasPriceArg = gasPriceGwei
+    ? ` --gas-price ${(BigInt(gasPriceGwei) * 1_000_000_000n).toString()}`
+    : ''
+  const cmd = `cd ${CONTRACTS_DIR} && ARBISCAN_API_KEY=dummy BASESCAN_API_KEY=dummy ETHERSCAN_API_KEY=dummy forge script script/DeployDWS.s.sol:DeployDWS --rpc-url ${rpcUrl} --private-key ${privateKey} --broadcast --legacy${gasPriceArg} 2>&1`
 
   const output = execSync(cmd, {
     encoding: 'utf-8',

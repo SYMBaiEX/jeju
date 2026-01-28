@@ -25,7 +25,7 @@ import {
 import type { BunPlugin, Subprocess } from 'bun'
 
 const APP_DIR = resolve(import.meta.dir, '..')
-const FRONTEND_PORT = Number(process.env.PORT) || 4014
+const FRONTEND_PORT = Number(process.env.GATEWAY_FRONTEND_PORT) || 4014
 const API_PORT = Number(process.env.GATEWAY_API_PORT) || 4013
 const RPC_PORT = Number(process.env.GATEWAY_RPC_PORT) || 4012
 const X402_PORT = Number(process.env.GATEWAY_X402_PORT) || 4015
@@ -37,6 +37,8 @@ interface ProcessInfo {
 
 const processes: ProcessInfo[] = []
 let shuttingDown = false
+const enableWatch = process.env.JEJU_NO_WATCH !== '1'
+const watchArgs = enableWatch ? ['--watch'] : []
 
 function cleanup() {
   if (shuttingDown) return
@@ -76,33 +78,35 @@ async function _waitForPort(port: number, timeout = 30000): Promise<boolean> {
   return false
 }
 
-async function startAPIServer(): Promise<boolean> {
-  console.log(`[Gateway] Starting API server on port ${API_PORT}...`)
+async function startWorkerServer(): Promise<boolean> {
+  console.log(`[Gateway] Starting worker server on port ${API_PORT}...`)
 
-  const proc = Bun.spawn(['bun', '--watch', 'api/server.ts'], {
+  const proc = Bun.spawn(['bun', ...watchArgs, 'api/worker.ts'], {
     cwd: APP_DIR,
     stdout: 'inherit',
     stderr: 'inherit',
     env: {
       ...process.env,
       PORT: String(API_PORT),
+      GATEWAY_API_PORT: String(API_PORT),
     },
   })
 
-  processes.push({ name: 'api', process: proc })
+  processes.push({ name: 'worker', process: proc })
   return true
 }
 
 async function startRPCServer(): Promise<boolean> {
   console.log(`[Gateway] Starting RPC server on port ${RPC_PORT}...`)
 
-  const proc = Bun.spawn(['bun', '--watch', 'api/rpc-server.ts'], {
+  const proc = Bun.spawn(['bun', ...watchArgs, 'api/rpc-server.ts'], {
     cwd: APP_DIR,
     stdout: 'inherit',
     stderr: 'inherit',
     env: {
       ...process.env,
       PORT: String(RPC_PORT),
+      RPC_GATEWAY_PORT: String(RPC_PORT),
     },
   })
 
@@ -113,7 +117,7 @@ async function startRPCServer(): Promise<boolean> {
 async function startX402Server(): Promise<boolean> {
   console.log(`[Gateway] Starting x402 server on port ${X402_PORT}...`)
 
-  const proc = Bun.spawn(['bun', '--watch', 'api/x402-server.ts'], {
+  const proc = Bun.spawn(['bun', ...watchArgs, 'api/x402-server.ts'], {
     cwd: APP_DIR,
     stdout: 'inherit',
     stderr: 'inherit',
@@ -179,6 +183,10 @@ const EXTERNALS = [
 ]
 
 let buildInProgress = false
+let frontendAssets: {
+  mainFileName: string
+  cssFileName: string | null
+} | null = null
 
 async function buildFrontend(): Promise<boolean> {
   if (buildInProgress) return false
@@ -194,10 +202,18 @@ async function buildFrontend(): Promise<boolean> {
     sourcemap: 'external',
     plugins: [browserPlugin],
     external: EXTERNALS,
+    naming: '[name].[hash].[ext]',
     define: {
-      'process.env': JSON.stringify({
-        NODE_ENV: 'development',
-        JEJU_NETWORK: 'localnet',
+      'process.env.NODE_ENV': JSON.stringify('development'),
+      'process.env.JEJU_NETWORK': JSON.stringify('localnet'),
+      'process.browser': 'true',
+      'globalThis.process': JSON.stringify({
+        env: { NODE_ENV: 'development', JEJU_NETWORK: 'localnet' },
+        browser: true,
+      }),
+      process: JSON.stringify({
+        env: { NODE_ENV: 'development', JEJU_NETWORK: 'localnet' },
+        browser: true,
       }),
       'import.meta.env.VITE_NETWORK': JSON.stringify('localnet'),
       'import.meta.env.PUBLIC_NETWORK': JSON.stringify('localnet'),
@@ -234,6 +250,17 @@ async function buildFrontend(): Promise<boolean> {
     return false
   }
 
+  const mainEntry = result.outputs.find(
+    (output) => output.kind === 'entry-point' && output.path.includes('main'),
+  )
+  const mainFileName = mainEntry
+    ? (mainEntry.path.split('/').pop() ?? 'main.js')
+    : 'main.js'
+  const cssEntry = result.outputs.find((output) => output.path.endsWith('.css'))
+  const cssFileName = cssEntry ? (cssEntry.path.split('/').pop() ?? null) : null
+
+  frontendAssets = { mainFileName, cssFileName }
+
   const duration = Date.now() - startTime
   console.log(`[Gateway] Frontend built in ${duration}ms`)
   return true
@@ -251,10 +278,18 @@ async function startFrontendServer(): Promise<boolean> {
   }
 
   const indexHtml = await Bun.file(resolve(APP_DIR, 'index.html')).text()
-  const transformedHtml = indexHtml.replace(
+  const mainFileName = frontendAssets?.mainFileName ?? 'main.js'
+  const cssFileName = frontendAssets?.cssFileName ?? null
+  let transformedHtml = indexHtml.replace(
     '/web/main.tsx',
-    '/dist/web/main.js',
+    `/dist/web/${mainFileName}`,
   )
+  if (cssFileName) {
+    transformedHtml = transformedHtml.replace(
+      '</head>',
+      `  <link rel="stylesheet" href="/dist/web/${cssFileName}">\n  </head>`,
+    )
+  }
 
   const host = getLocalhostHost()
 
@@ -320,12 +355,14 @@ async function startFrontendServer(): Promise<boolean> {
   console.log(`[Gateway] Frontend dev server started on port ${FRONTEND_PORT}`)
 
   // Watch for changes
-  watch(resolve(APP_DIR, 'web'), { recursive: true }, (_event, filename) => {
-    if (filename && (filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
-      console.log(`[Gateway] ${filename} changed, rebuilding...`)
-      buildFrontend()
-    }
-  })
+  if (enableWatch) {
+    watch(resolve(APP_DIR, 'web'), { recursive: true }, (_event, filename) => {
+      if (filename && (filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
+        console.log(`[Gateway] ${filename} changed, rebuilding...`)
+        buildFrontend()
+      }
+    })
+  }
 
   return true
 }
@@ -382,7 +419,7 @@ async function main() {
   console.log('')
 
   // Start API services
-  await startAPIServer()
+  await startWorkerServer()
   await startRPCServer()
   await startX402Server()
 

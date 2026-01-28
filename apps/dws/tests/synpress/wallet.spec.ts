@@ -21,7 +21,7 @@ test.describe('DWS - Wallet Connection', () => {
     await page.waitForLoadState('networkidle')
 
     // DWS should show a connect wallet option
-    const connectBtn = page.locator('button:has-text(/connect/i)').first()
+    const connectBtn = page.getByRole('button', { name: /sign in/i }).first()
     await expect(connectBtn).toBeVisible({ timeout: 10000 })
 
     await page.screenshot({
@@ -47,9 +47,13 @@ test.describe('DWS - Wallet Connection', () => {
     await page.waitForLoadState('networkidle')
 
     // Click connect button
-    const connectBtn = page.locator('button:has-text(/connect/i)').first()
+    const connectBtn = page.getByRole('button', { name: /sign in/i }).first()
     await connectBtn.click()
     await page.waitForTimeout(1000)
+    const walletOption = page.getByRole('button', { name: /connect wallet/i })
+    if (await walletOption.isVisible().catch(() => false)) {
+      await walletOption.click()
+    }
 
     // Connect MetaMask
     await metamask.connectToDapp()
@@ -83,10 +87,14 @@ test.describe('DWS - Authenticated Navigation', () => {
     await page.goto(BASE_URL)
 
     // Connect wallet first
-    const connectBtn = page.locator('button:has-text(/connect/i)').first()
+    const connectBtn = page.getByRole('button', { name: /sign in/i }).first()
     if (await connectBtn.isVisible()) {
       await connectBtn.click()
       await page.waitForTimeout(1000)
+      const walletOption = page.getByRole('button', { name: /connect wallet/i })
+      if (await walletOption.isVisible().catch(() => false)) {
+        await walletOption.click()
+      }
       await metamask.connectToDapp()
     }
 
@@ -123,10 +131,14 @@ test.describe('DWS - Authenticated Navigation', () => {
     await page.goto(BASE_URL)
 
     // Connect wallet first
-    const connectBtn = page.locator('button:has-text(/connect/i)').first()
+    const connectBtn = page.getByRole('button', { name: /sign in/i }).first()
     if (await connectBtn.isVisible()) {
       await connectBtn.click()
       await page.waitForTimeout(1000)
+      const walletOption = page.getByRole('button', { name: /connect wallet/i })
+      if (await walletOption.isVisible().catch(() => false)) {
+        await walletOption.click()
+      }
       await metamask.connectToDapp()
     }
 
@@ -161,10 +173,14 @@ test.describe('DWS - Faucet Integration', () => {
     await page.goto(`${BASE_URL}/faucet`)
 
     // Connect wallet first
-    const connectBtn = page.locator('button:has-text(/connect/i)').first()
+    const connectBtn = page.getByRole('button', { name: /sign in/i }).first()
     if (await connectBtn.isVisible()) {
       await connectBtn.click()
       await page.waitForTimeout(1000)
+      const walletOption = page.getByRole('button', { name: /connect wallet/i })
+      if (await walletOption.isVisible().catch(() => false)) {
+        await walletOption.click()
+      }
       await metamask.connectToDapp()
     }
 

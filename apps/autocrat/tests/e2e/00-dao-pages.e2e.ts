@@ -153,10 +153,10 @@ test.describe('Header Navigation', () => {
     await expect(createButton).toBeVisible()
   })
 
-  test('header has wallet connect button', async ({ page }) => {
+  test('header has sign in button', async ({ page }) => {
     await page.goto(BASE_URL)
 
-    const connectButton = page.getByRole('button', { name: /Connect/i })
+    const connectButton = page.getByRole('button', { name: /Sign In/i })
     await expect(connectButton).toBeVisible()
   })
 })

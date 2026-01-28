@@ -167,14 +167,9 @@ async function build() {
   reportBundleSizes(frontendResult, 'Gateway Frontend')
   console.log('[Gateway] Frontend built successfully')
 
-  // Build API servers
+  // Build standalone API servers (used in dev mode)
   console.log('[Gateway] Building API servers...')
-  const apiFiles = [
-    'server.ts',
-    'rpc-server.ts',
-    'x402-server.ts',
-    'a2a-server.ts',
-  ]
+  const apiFiles = ['rpc-server.ts', 'x402-server.ts']
   for (const apiFile of apiFiles) {
     const result = await Bun.build({
       entrypoints: [resolve(APP_DIR, `api/${apiFile}`)],
@@ -191,10 +186,11 @@ async function build() {
   console.log('[Gateway] API servers built')
 
   // Build worker for workerd deployment
+  // Uses worker-entry.ts which exports the handler as default (required for workerd)
   console.log('[Gateway] Building worker for DWS deployment...')
   mkdirSync(join(outdir, 'worker'), { recursive: true })
   const workerResult = await Bun.build({
-    entrypoints: [resolve(APP_DIR, 'api/worker.ts')],
+    entrypoints: [resolve(APP_DIR, 'api/worker-entry.ts')],
     outdir: join(outdir, 'worker'),
     target: 'bun',
     minify: true,

@@ -1,5 +1,5 @@
 import { getCacheClient, safeParseCached } from '@jejunetwork/cache'
-import { getServiceUrl } from '@jejunetwork/config'
+import { getDWSUrl } from '@jejunetwork/config'
 import { logger } from '@jejunetwork/shared'
 import { Elysia } from 'elysia'
 import { z } from 'zod'
@@ -84,8 +84,13 @@ interface InsightContext {
 async function generateAIInsights(
   context: InsightContext,
 ): Promise<MarketInsight[]> {
-  const computeUrl = getServiceUrl('compute')
-  if (!computeUrl) {
+  // Use DWS inference endpoint for AI completions, NOT the compute marketplace
+  // getServiceUrl('compute') returns compute.marketplace which is wrong (points to Bazaar's own port!)
+  const inferenceUrl = getDWSUrl()
+  if (!inferenceUrl) {
+    logger.warn(
+      '[Intel] DWS inference endpoint not configured, using rule-based insights',
+    )
     return generateRuleBasedInsights(context)
   }
 
@@ -134,7 +139,7 @@ Return ONLY a valid JSON array with objects having these fields:
 - confidence: number 0-100
 - tokens: array of relevant token symbols`
 
-  const response = await fetch(`${computeUrl}/v1/chat/completions`, {
+  const response = await fetch(`${inferenceUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

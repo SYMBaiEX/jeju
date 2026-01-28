@@ -78,6 +78,7 @@ test.describe('Model Hub', () => {
 })
 
 test.describe('Model Detail', () => {
+  test.skip(isRemote, 'Skipping model detail on remote network')
   test('displays model header', async ({ page }) => {
     await page.goto('/models/jeju/llama-3-jeju-ft')
     await expect(
@@ -115,6 +116,7 @@ test.describe('Model Detail', () => {
 })
 
 test.describe('Inference Playground', () => {
+  test.skip(isRemote, 'Skipping inference playground on remote network')
   test('displays inference tab', async ({ page }) => {
     await page.goto('/models/jeju/llama-3-jeju-ft')
     await page.getByRole('button', { name: /inference/i }).click()
@@ -185,6 +187,7 @@ test.describe('Inference Playground', () => {
 })
 
 test.describe('Training Tab', () => {
+  test.skip(isRemote, 'Skipping training tab on remote network')
   test('displays training options', async ({ page }) => {
     await page.goto('/models/jeju/llama-3-jeju-ft')
     await page.getByRole('button', { name: /training/i }).click()
@@ -205,6 +208,7 @@ test.describe('Training Tab', () => {
 })
 
 test.describe('Model Upload', () => {
+  test.skip(isRemote, 'Skipping model upload on remote network')
   test('navigates to upload page', async ({ page }) => {
     await page.goto('/models/upload')
     await expect(page.getByRole('heading', { name: /upload/i })).toBeVisible()
@@ -217,6 +221,7 @@ test.describe('Model Upload', () => {
 })
 
 test.describe('Model Discussions', () => {
+  test.skip(isRemote, 'Skipping model discussions on remote network')
   test('displays discussions page', async ({ page }) => {
     await page.goto('/models/jeju/llama-3-jeju-ft/discussions')
     await expect(

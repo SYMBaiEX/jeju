@@ -468,7 +468,7 @@ export class CrucibleAgentRuntime {
 
       // Combine LLM response text with action result
       const actionResultText = execResult.success
-        ? (execResult.result as { response?: string })?.response ?? ''
+        ? ((execResult.result as { response?: string })?.response ?? '')
         : `Action failed: ${execResult.error}`
 
       const combinedText = actionResultText
@@ -484,7 +484,10 @@ export class CrucibleAgentRuntime {
             params,
             success: execResult.success,
             result: execResult.success
-              ? { response: (execResult.result as { response?: string })?.response }
+              ? {
+                  response: (execResult.result as { response?: string })
+                    ?.response,
+                }
               : { error: execResult.error },
           },
         ],
@@ -494,7 +497,16 @@ export class CrucibleAgentRuntime {
     return {
       text: cleanText,
       action,
-      actions: action ? [{ type: action, params, success: false, result: { error: 'No handler available' } }] : undefined,
+      actions: action
+        ? [
+            {
+              type: action,
+              params,
+              success: false,
+              result: { error: 'No handler available' },
+            },
+          ]
+        : undefined,
     }
   }
 
@@ -649,11 +661,17 @@ export class CrucibleAgentRuntime {
     let model: string
     if (modelTier === 'TEXT_ANALYSIS') {
       // Analysis tier: use analysis preference, fall back to large, then default
-      model = modelPrefs?.analysis ?? modelPrefs?.large ?? tierToModel[modelTier] ?? 'llama-3.3-70b-versatile'
+      model =
+        modelPrefs?.analysis ??
+        modelPrefs?.large ??
+        tierToModel[modelTier] ??
+        'llama-3.3-70b-versatile'
     } else if (modelTier === 'TEXT_LARGE') {
-      model = modelPrefs?.large ?? tierToModel[modelTier] ?? 'llama-3.3-70b-versatile'
+      model =
+        modelPrefs?.large ?? tierToModel[modelTier] ?? 'llama-3.3-70b-versatile'
     } else if (modelTier === 'TEXT_SMALL') {
-      model = modelPrefs?.small ?? tierToModel[modelTier] ?? 'llama-3.1-8b-instant'
+      model =
+        modelPrefs?.small ?? tierToModel[modelTier] ?? 'llama-3.1-8b-instant'
     } else {
       model = tierToModel[modelTier] ?? 'llama-3.1-8b-instant'
     }
@@ -694,14 +712,16 @@ export class CrucibleAgentRuntime {
     roomId: string
     count?: number
     tableName?: string
-  }): Promise<Array<{
-    id: string
-    entityId: string
-    agentId?: string
-    roomId: string
-    content: { text: string }
-    createdAt?: number
-  }>> {
+  }): Promise<
+    Array<{
+      id: string
+      entityId: string
+      agentId?: string
+      roomId: string
+      content: { text: string }
+      createdAt?: number
+    }>
+  > {
     const { getDatabase } = await import('./database')
     const db = getDatabase()
 

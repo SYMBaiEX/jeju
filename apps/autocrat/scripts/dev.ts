@@ -15,7 +15,8 @@ import type { BunPlugin, Subprocess } from 'bun'
 
 const APP_DIR = resolve(import.meta.dir, '..')
 const API_PORT = Number(process.env.API_PORT) || 4040
-const FRONTEND_PORT = Number(process.env.PORT) || 4042
+const frontendPortEnv = process.env.FRONTEND_PORT
+const FRONTEND_PORT = frontendPortEnv ? Number(frontendPortEnv) : 4042
 
 interface ProcessInfo {
   name: string
@@ -74,7 +75,7 @@ async function startAPIServer(): Promise<boolean> {
   const ANVIL_DEV_KEY =
     '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 
-  const proc = Bun.spawn(['bun', '--watch', 'api/server.ts'], {
+  const proc = Bun.spawn(['bun', '--watch', 'api/worker.ts'], {
     cwd: APP_DIR,
     stdout: 'inherit',
     stderr: 'inherit',

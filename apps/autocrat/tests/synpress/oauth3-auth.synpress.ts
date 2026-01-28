@@ -47,12 +47,12 @@ test.describe('OAuth3 Authentication Flow', () => {
     expect(authErrors).toHaveLength(0)
   })
 
-  test('connect button is visible and clickable', async ({ page }) => {
+  test('sign in button is visible and clickable', async ({ page }) => {
     await page.goto(AUTOCRAT_URL)
     await page.waitForLoadState('networkidle')
 
-    // Should show Connect button in header
-    const connectButton = page.getByRole('button', { name: /Connect/i })
+    // Should show Sign In button in header
+    const connectButton = page.getByRole('button', { name: /Sign In/i })
     await expect(connectButton).toBeVisible()
 
     // Click should open modal/options
@@ -61,7 +61,7 @@ test.describe('OAuth3 Authentication Flow', () => {
 
     // Modal or wallet options should appear
     const walletOptions = page.locator(
-      'text=MetaMask, text=WalletConnect, text=Wallet',
+      'text=Connect Wallet, text=Sign in with Passkey',
     )
     const isOptionsVisible = await walletOptions
       .first()
@@ -89,11 +89,12 @@ test.describe('OAuth3 Authentication Flow', () => {
     await page.waitForLoadState('networkidle')
 
     // Verify initially disconnected
-    await verifyDisconnected(page, { connectButtonText: /Connect/i })
+    await verifyDisconnected(page, { connectButtonText: /Sign In/i })
 
     // Connect wallet through OAuth3
     await connectAndVerify(page, metamask, {
-      connectButtonText: /Connect/i,
+      connectButtonText: /Sign In/i,
+      walletOptionText: 'Connect Wallet',
     })
 
     // Verify OAuth3 session is established
@@ -119,7 +120,8 @@ test.describe('OAuth3 Authentication Flow', () => {
 
     // Connect
     await connectAndVerify(page, metamask, {
-      connectButtonText: /Connect/i,
+      connectButtonText: /Sign In/i,
+      walletOptionText: 'Connect Wallet',
     })
 
     // Reload the page
@@ -149,7 +151,8 @@ test.describe('OAuth3 Authentication Flow', () => {
 
     // Connect first
     await connectAndVerify(page, metamask, {
-      connectButtonText: /Connect/i,
+      connectButtonText: /Sign In/i,
+      walletOptionText: 'Connect Wallet',
     })
 
     // Find and click disconnect/logout button
@@ -175,7 +178,7 @@ test.describe('OAuth3 Authentication Flow', () => {
       await page.waitForTimeout(1000)
 
       // Should be disconnected now
-      const connectButton = page.getByRole('button', { name: /Connect/i })
+      const connectButton = page.getByRole('button', { name: /Sign In/i })
       await expect(connectButton).toBeVisible()
     }
   })
@@ -185,8 +188,8 @@ test.describe('OAuth3 Authentication Flow', () => {
     await page.waitForLoadState('networkidle')
 
     // Should show connect prompt or redirect
-    const connectButton = page.getByRole('button', { name: /Connect/i })
-    const connectPrompt = page.locator('text=Connect your wallet')
+    const connectButton = page.getByRole('button', { name: /Sign In/i })
+    const connectPrompt = page.locator('text=Use wallet or passkey')
 
     const requiresAuth =
       (await connectButton.isVisible({ timeout: 3000 }).catch(() => false)) ||
@@ -202,11 +205,11 @@ test.describe('OAuth3 Multi-Provider Support', () => {
     await page.waitForLoadState('networkidle')
 
     // Open auth modal
-    await page.getByRole('button', { name: /Connect/i }).click()
+    await page.getByRole('button', { name: /Sign In/i }).click()
     await page.waitForTimeout(500)
 
     // Should show at least MetaMask option
-    const walletOptions = page.locator('text=MetaMask')
+    const walletOptions = page.locator('text=Connect Wallet')
     const hasWalletOptions = await walletOptions
       .isVisible({ timeout: 3000 })
       .catch(() => false)

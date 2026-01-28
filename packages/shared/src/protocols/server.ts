@@ -111,7 +111,7 @@ export interface A2ASkill {
   }
 }
 
-// Note: For AgentCard type, import from './a2a'
+// For AgentCard type, import from './a2a'
 
 export interface MCPResource {
   uri: string
@@ -241,7 +241,7 @@ export function createServer(config: ServerConfig) {
     )
     .use(
       cors({
-        origin: (request) => {
+        origin: (request: Request) => {
           const origin = request.headers.get('origin')
           // Allow requests without origin (same-origin/server-to-server)
           if (!origin) return true

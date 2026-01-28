@@ -13,6 +13,7 @@
       "apps/**/*.tsx",
       "!**/model/generated",
       "!packages/workerd/**",
+      "!packages/workerd-original/**",
       "!packages/contracts/lib/**",
       "!packages/contracts/mcore_*/**"
     ]

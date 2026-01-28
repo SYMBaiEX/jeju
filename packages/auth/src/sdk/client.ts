@@ -35,6 +35,27 @@ function generateUUID(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+function arrayBufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function isPasskeyCreationOptions(
+  options: PasskeyPublicKeyOptions,
+): options is Parameters<typeof toWebAuthnCreationOptions>[0] {
+  return 'user' in options && 'rp' in options
+}
+
+function isPasskeyRequestOptions(
+  options: PasskeyPublicKeyOptions,
+): options is Parameters<typeof toWebAuthnRequestOptions>[0] {
+  return 'challenge' in options && !('user' in options)
+}
+
 // OAuth callback data schema
 const OAuthCallbackSchema = z.object({
   code: z.string().optional(),
@@ -58,6 +79,7 @@ import {
   createOAuth3StorageService,
   type OAuth3StorageService,
 } from '../infrastructure/storage-integration.js'
+import { deriveLocalEncryptionKey } from '../infrastructure/threshold-encryption.js'
 import { generateFarcasterSignInMessage } from '../providers/farcaster-utils.js'
 import {
   AuthProvider,
@@ -70,9 +92,13 @@ import {
 import {
   CredentialVerifyResponseSchema,
   OAuth3SessionSchema,
+  type PasskeyPublicKeyOptions,
   OAuthInitResponseSchema,
+  PasskeyOptionsResponseSchema,
   SignResponseSchema,
   TEEAttestationSchema,
+  toWebAuthnCreationOptions,
+  toWebAuthnRequestOptions,
   VerifiableCredentialSchema,
   validateResponse,
 } from '../validation.js'
@@ -360,16 +386,7 @@ export class OAuth3Client {
     // If decentralized mode and not initialized, try auto-initialization
     // If discovery fails (missing contracts, unregistered app), fall back to centralized mode
     if (this.discovery && !this.currentNode && !this.config.teeAgentUrl) {
-      try {
-        await this.initialize()
-      } catch (err) {
-        console.debug(
-          '[OAuth3] Decentralized discovery failed, falling back to centralized mode:',
-          err instanceof Error ? err.message : String(err),
-        )
-        // Disable discovery to prevent retry
-        this.discovery = null
-      }
+      await this.initialize()
     }
 
     let session: OAuth3Session
@@ -377,6 +394,9 @@ export class OAuth3Client {
     switch (options.provider) {
       case AuthProvider.WALLET:
         session = await this.loginWithWallet()
+        break
+      case AuthProvider.PASSKEY:
+        session = await this.loginWithPasskey()
         break
       case AuthProvider.FARCASTER:
         session = await this.loginWithFarcaster()
@@ -387,6 +407,13 @@ export class OAuth3Client {
 
     // Store session in decentralized storage
     if (this.storage) {
+      // Derive encryption key from session's signing public key
+      // This provides deterministic encryption per session for IPFS storage
+      const encryptionKey = deriveLocalEncryptionKey(
+        session.signingPublicKey,
+        `oauth3-session-${session.sessionId}`,
+      )
+      this.storage.setEncryptionKey(encryptionKey)
       await this.storage.storeSession(session)
     }
 
@@ -524,6 +551,125 @@ export class OAuth3Client {
     )
     this.setSession(session)
     this.emit('login', { provider: 'wallet', session })
+
+    return session
+  }
+
+  private async loginWithPasskey(): Promise<OAuth3Session> {
+    if (typeof window === 'undefined' || !navigator.credentials) {
+      throw new Error('Passkey authentication requires a browser context')
+    }
+
+    const teeAgentUrl = this.getTeeAgentUrl()
+    const appId = this.discoveredApp?.appId ?? this.config.appId
+    const origin = new URL(this.config.redirectUri).origin
+
+    const optionsResponse = await fetch(`${teeAgentUrl}/auth/passkey/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        appId,
+        origin,
+      }),
+    })
+
+    if (!optionsResponse.ok) {
+      throw new Error(
+        `Failed to get passkey authentication options: ${optionsResponse.status}`,
+      )
+    }
+
+    const optionsData = validateResponse(
+      PasskeyOptionsResponseSchema,
+      await optionsResponse.json(),
+      'passkey authentication options',
+    )
+
+    const mode =
+      optionsData.mode === 'registration' ? 'registration' : 'authentication'
+
+    const publicKeyOptions = optionsData.publicKey
+    const credential =
+      mode === 'registration'
+        ? await navigator.credentials.create({
+            publicKey: isPasskeyCreationOptions(publicKeyOptions)
+              ? toWebAuthnCreationOptions(publicKeyOptions)
+              : (() => {
+                  throw new Error('Invalid passkey registration options')
+                })(),
+          })
+        : await navigator.credentials.get({
+            publicKey: isPasskeyRequestOptions(publicKeyOptions)
+              ? toWebAuthnRequestOptions(publicKeyOptions)
+              : (() => {
+                  throw new Error('Invalid passkey authentication options')
+                })(),
+          })
+
+    if (!credential || !(credential instanceof PublicKeyCredential)) {
+      throw new Error('Passkey authentication was cancelled')
+    }
+
+    const response = credential.response
+    if (!response) {
+      throw new Error('Invalid passkey response')
+    }
+
+    const clientDataJSON = arrayBufferToBase64url(response.clientDataJSON)
+
+    let responsePayload: Record<string, string | undefined>
+    if (mode === 'registration') {
+      if (!('attestationObject' in response)) {
+        throw new Error('Invalid passkey registration response')
+      }
+      responsePayload = {
+        clientDataJSON,
+        attestationObject: arrayBufferToBase64url(response.attestationObject),
+      }
+    } else {
+      if (!('authenticatorData' in response) || !('signature' in response)) {
+        throw new Error('Invalid passkey authentication response')
+      }
+      responsePayload = {
+        clientDataJSON,
+        authenticatorData: arrayBufferToBase64url(response.authenticatorData),
+        signature: arrayBufferToBase64url(response.signature),
+        userHandle: response.userHandle
+          ? arrayBufferToBase64url(response.userHandle)
+          : undefined,
+      }
+    }
+
+    const verifyResponse = await fetch(`${teeAgentUrl}/auth/passkey/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        appId,
+        mode,
+        deviceName: mode === 'registration' ? 'Passkey' : undefined,
+        challengeId: optionsData.challengeId,
+        credential: {
+          id: credential.id,
+          rawId: arrayBufferToBase64url(credential.rawId),
+          response: responsePayload,
+          type: credential.type,
+        },
+      }),
+    })
+
+    if (!verifyResponse.ok) {
+      throw new Error(
+        `Passkey authentication failed: ${verifyResponse.status}`,
+      )
+    }
+
+    const session = validateResponse(
+      OAuth3SessionSchema,
+      await verifyResponse.json(),
+      'passkey login session',
+    )
+    this.setSession(session)
+    this.emit('login', { provider: 'passkey', session })
 
     return session
   }
@@ -970,6 +1116,12 @@ export class OAuth3Client {
 
     // Update in decentralized storage
     if (this.storage) {
+      // Derive encryption key from session's signing public key
+      const encryptionKey = deriveLocalEncryptionKey(
+        newSession.signingPublicKey,
+        `oauth3-session-${newSession.sessionId}`,
+      )
+      this.storage.setEncryptionKey(encryptionKey)
       await this.storage.storeSession(newSession)
     }
 

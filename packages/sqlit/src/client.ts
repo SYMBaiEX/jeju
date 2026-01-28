@@ -7,6 +7,7 @@
  */
 
 import type { Hex } from 'viem'
+import { z } from 'zod'
 import type {
   BatchExecuteResponse,
   CreateDatabaseRequest,
@@ -47,6 +48,25 @@ interface APIResponse<T> {
   error?: string
   code?: string
   data?: T
+}
+
+type AdapterRowValue = string | number | boolean | null
+
+type AdapterQueryData = {
+  rows?: Array<Record<string, AdapterRowValue> | AdapterRowValue[]>
+  types?: string[]
+  columns?: string[]
+}
+
+type AdapterExecData = {
+  last_insert_id?: number
+  affected_rows?: number
+}
+
+type AdapterResponse = {
+  success: boolean
+  status?: string
+  data?: AdapterQueryData | AdapterExecData
 }
 
 /**
@@ -124,7 +144,10 @@ export class SQLitClient {
     options?: QueryOptions,
   ): Promise<ExecuteResponse> {
     const endpoint = this.getCurrentEndpoint()
-    const timeoutMs = options?.timeoutMs ?? this.config.timeoutMs
+    const timeoutMs =
+      options && typeof options.timeoutMs === 'number'
+        ? options.timeoutMs
+        : this.config.timeoutMs
 
     const body = {
       databaseId: this.config.databaseId,
@@ -145,6 +168,10 @@ export class SQLitClient {
         signal: AbortSignal.timeout(timeoutMs),
       })
 
+      if (!response.ok) {
+        return this.executeViaAdapter(sql, params, options)
+      }
+
       const result = (await response.json()) as APIResponse<ExecuteResponse> &
         ExecuteResponse
 
@@ -162,12 +189,128 @@ export class SQLitClient {
 
       return result
     } catch (error) {
+      if (error instanceof Error && error.name === 'SyntaxError') {
+        return this.executeViaAdapter(sql, params, options)
+      }
       // Try failover
       if (this.config.fallbackEndpoints?.length) {
         return this.executeWithFailover(sql, params, options)
       }
       throw error
     }
+  }
+
+  private async executeViaAdapter(
+    sql: string,
+    params?: (string | number | boolean | null | bigint)[],
+    options?: QueryOptions,
+  ): Promise<ExecuteResponse> {
+    const endpoint = this.getCurrentEndpoint()
+    const timeoutMs =
+      options && typeof options.timeoutMs === 'number'
+        ? options.timeoutMs
+        : this.config.timeoutMs
+    const queryType =
+      options && options.queryType ? options.queryType : 'write'
+    const url =
+      queryType === 'read'
+        ? `${endpoint}/v1/query?assoc=1`
+        : `${endpoint}/v1/exec`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        database: this.config.databaseId,
+        query: sql,
+        args: params?.map((param) =>
+          typeof param === 'bigint' ? param.toString() : param,
+        ),
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+
+    const result = (await response.json()) as AdapterResponse
+    if (!result.success) {
+      throw new SQLitError(
+        result.status ?? 'Query failed',
+        SQLitErrorCode.DATABASE_UNAVAILABLE,
+      )
+    }
+
+    const data = result.data
+    if (queryType === 'read') {
+      const rows =
+        data && 'rows' in data && Array.isArray(data.rows) ? data.rows : []
+      const columns =
+        data &&
+        'columns' in data &&
+        Array.isArray(data.columns) &&
+        data.columns.every((col) => typeof col === 'string')
+          ? data.columns
+          : undefined
+      const normalizedRows = SQLitClient.normalizeAdapterRows(rows, columns)
+      return {
+        success: true,
+        databaseId: this.config.databaseId,
+        readOnly: true,
+        rows: normalizedRows,
+        rowsAffected: normalizedRows.length,
+        lastInsertId: BigInt(0),
+        executionTimeMs: 0,
+      }
+    }
+
+    const affectedRows =
+      data && 'affected_rows' in data && typeof data.affected_rows === 'number'
+        ? data.affected_rows
+        : 0
+    const lastInsertIdValue =
+      data &&
+      'last_insert_id' in data &&
+      typeof data.last_insert_id === 'number'
+        ? data.last_insert_id
+        : 0
+
+    return {
+      success: true,
+      databaseId: this.config.databaseId,
+      readOnly: false,
+      rows: [],
+      rowsAffected: affectedRows,
+      lastInsertId: BigInt(lastInsertIdValue),
+      executionTimeMs: 0,
+    }
+  }
+
+  private static normalizeAdapterRows(
+    rows: Array<Record<string, AdapterRowValue> | AdapterRowValue[]>,
+    columns?: string[],
+  ): Record<string, AdapterRowValue>[] {
+    const isRecordRow = (
+      row: Record<string, AdapterRowValue> | AdapterRowValue[],
+    ): row is Record<string, AdapterRowValue> =>
+      !Array.isArray(row) && typeof row === 'object' && row !== null
+
+    if (!columns || rows.length === 0) {
+      return rows.filter(isRecordRow)
+    }
+
+    if (isRecordRow(rows[0])) {
+      return rows.filter(isRecordRow)
+    }
+
+    return rows.map((row) => {
+      if (isRecordRow(row)) {
+        return row
+      }
+      const mapped: Record<string, AdapterRowValue> = {}
+      columns.forEach((column, index) => {
+        const value = row[index]
+        mapped[column] = value === undefined ? null : value
+      })
+      return mapped
+    })
   }
 
   /**
@@ -500,11 +643,25 @@ export class SQLitClient {
   async isHealthy(): Promise<boolean> {
     try {
       const endpoint = this.getCurrentEndpoint()
-      const response = await fetch(`${endpoint}/health`, {
+      // Try /health first, fall back to root endpoint for simple adapters
+      let response = await fetch(`${endpoint}/health`, {
         signal: AbortSignal.timeout(5000),
       })
-      const result = (await response.json()) as { success: boolean }
-      return result.success === true
+      if (!response.ok) {
+        response = await fetch(`${endpoint}/`, {
+          signal: AbortSignal.timeout(5000),
+        })
+      }
+      const HealthSchema = z
+        .object({
+          success: z.boolean().optional(),
+          status: z.string().optional(),
+        })
+        .passthrough()
+      const parsed = HealthSchema.safeParse(await response.json())
+      if (!parsed.success) return false
+      const { success, status } = parsed.data
+      return success === true || status === 'healthy' || status === 'ok'
     } catch {
       return false
     }

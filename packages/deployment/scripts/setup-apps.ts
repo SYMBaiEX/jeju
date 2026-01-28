@@ -7,7 +7,14 @@
  * This script is safe to fail - it's a best-effort setup
  */
 
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  unlinkSync,
+} from 'node:fs'
 import { join, relative } from 'node:path'
 import { $ } from 'bun'
 import { discoverVendorApps } from './shared/discover-apps'
@@ -49,19 +56,37 @@ function ensureWorkspaceSymlinks(): void {
     gateway: 'apps/gateway',
     crucible: 'apps/crucible',
     documentation: 'apps/documentation',
-    monitoring: 'apps/monitoring',
+    monitoring: 'packages/monitoring',
     org: 'apps/org',
   }
 
   let linkedCount = 0
+
+  function isBrokenSymlink(path: string): boolean {
+    if (existsSync(path)) {
+      return false
+    }
+    try {
+      return lstatSync(path).isSymbolicLink()
+    } catch {
+      return false
+    }
+  }
 
   for (const [name, sourcePath] of Object.entries(workspacePackages)) {
     const fullSourcePath = join(process.cwd(), sourcePath)
     const symlinkPath = join(jejuScopePath, name)
 
     // Only create symlink if source exists and symlink doesn't
-    if (existsSync(fullSourcePath) && !existsSync(symlinkPath)) {
+    const brokenSymlink = isBrokenSymlink(symlinkPath)
+    if (
+      existsSync(fullSourcePath) &&
+      (!existsSync(symlinkPath) || brokenSymlink)
+    ) {
       const relativePath = relative(jejuScopePath, fullSourcePath)
+      if (brokenSymlink) {
+        unlinkSync(symlinkPath)
+      }
       symlinkSync(relativePath, symlinkPath)
       linkedCount++
     }

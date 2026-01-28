@@ -28,7 +28,7 @@
  *     dataDir: '.data/sqlit',
  *     region: 'us-east',
  *     teeEnabled: false,
- *     l2RpcUrl: 'http://localhost:8545',
+ *     l2RpcUrl: 'http://localhost:6546',
  *     registryAddress: '0x...',
  *     version: '2.0.0',
  *   },

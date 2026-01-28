@@ -3,6 +3,7 @@ import {
   CORE_PORTS,
   createAppConfig,
   getDWSUrl,
+  getEnvNumber,
   getEnvVar,
   getL2RpcUrl,
   getLocalhostHost,
@@ -26,8 +27,17 @@ export interface FactoryConfig {
   sqlitPrivateKey?: Hex
 }
 
+function getEnvHex(key: string): Hex | undefined {
+  const value = getEnvVar(key)
+  if (!value) return undefined
+  if (!value.startsWith('0x')) {
+    throw new Error(`[factory] ${key} must be a 0x-prefixed hex string`)
+  }
+  return value as Hex
+}
+
 const { config, configure } = createAppConfig<FactoryConfig>({
-  port: CORE_PORTS.FACTORY.get(),
+  port: getEnvNumber('PORT') ?? CORE_PORTS.FACTORY.get(),
   isDev: getEnvVar('NODE_ENV') !== 'production',
   dwsUrl: getEnvVar('DWS_URL') || getDWSUrl(),
   rpcUrl: getEnvVar('RPC_URL') || getL2RpcUrl(),
@@ -43,7 +53,7 @@ const { config, configure } = createAppConfig<FactoryConfig>({
   // SQLit configuration with sensible defaults
   sqlitEndpoint: getEnvVar('SQLIT_ENDPOINT') || getSQLitUrl(),
   sqlitDatabaseId: getEnvVar('SQLIT_DATABASE_ID') || 'factory',
-  sqlitPrivateKey: getEnvVar('SQLIT_PRIVATE_KEY') as Hex | undefined,
+  sqlitPrivateKey: getEnvHex('SQLIT_PRIVATE_KEY'),
 })
 
 export function configureFactory(configUpdates: Partial<FactoryConfig>): void {

@@ -103,7 +103,7 @@ export function getOAuth3Config() {
   const network = getNetwork()
 
   return {
-    appId: 'crucible',
+    appId: 'crucible.apps.jeju',
     appName: 'Crucible',
     // Redirect URI for OAuth callbacks
     redirectUri: getRedirectUri(),

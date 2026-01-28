@@ -495,7 +495,7 @@ export default function CoinLaunchPage() {
           className="btn-primary w-full py-4 text-lg disabled:opacity-50"
         >
           {!isConnected
-            ? 'Connect Wallet'
+            ? 'Sign In'
             : mode === 'simple' && !hasFactory
               ? 'Factory Not Deployed'
               : mode === 'bonding' && !hasLaunchpad

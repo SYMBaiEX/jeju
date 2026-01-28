@@ -31,3 +31,8 @@ vendor
 # Temporary files
 tmp
 *.tmp
+
+# Local test ledgers and sockets
+test-ledger
+packages/bridge/test-ledger
+**/*.rpc

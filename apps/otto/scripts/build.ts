@@ -36,6 +36,7 @@ async function build() {
       sourcemap: 'external',
       splitting: false,
       packages: 'bundle',
+      external: ['pino'],
       drop: ['debugger'],
       naming: {
         entry: '[name]-[hash].js',
@@ -44,6 +45,8 @@ async function build() {
       },
       define: {
         'process.env.NODE_ENV': JSON.stringify('production'),
+        'process.env': JSON.stringify({}),
+        process: JSON.stringify({ env: {} }),
       },
     })
 

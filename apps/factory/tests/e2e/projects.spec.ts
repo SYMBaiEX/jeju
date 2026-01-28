@@ -50,6 +50,7 @@ test.describe('Projects List', () => {
 })
 
 test.describe('Create Project', () => {
+  test.skip(isRemote, 'Skipping project creation on remote network')
   test('displays project creation form', async ({ page }) => {
     await page.goto('/projects/new')
     await expect(page.getByRole('main')).toBeVisible()
@@ -67,6 +68,7 @@ test.describe('Create Project', () => {
 })
 
 test.describe('Project Detail', () => {
+  test.skip(isRemote, 'Skipping project detail on remote network')
   test('displays project board', async ({ page }) => {
     await page.goto('/projects/1')
     await expect(page.getByRole('main')).toBeVisible()
@@ -87,6 +89,7 @@ test.describe('Project Detail', () => {
 })
 
 test.describe('Task Management', () => {
+  test.skip(isRemote, 'Skipping task management on remote network')
   test('opens task creation modal', async ({ page }) => {
     await page.goto('/projects/1')
     const addTaskBtn = page.getByRole('button', { name: /add task|new task/i })

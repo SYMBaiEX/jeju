@@ -8,11 +8,13 @@ import { z } from 'zod'
 import { config } from '../config'
 
 // Schema for agent character metadata from IPFS
-export const AgentCharacterSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  topics: z.array(z.string()).optional(),
-}).passthrough() // Allow additional fields
+export const AgentCharacterSchema = z
+  .object({
+    name: z.string(),
+    description: z.string().optional(),
+    topics: z.array(z.string()).optional(),
+  })
+  .passthrough() // Allow additional fields
 
 export type AgentCharacter = z.infer<typeof AgentCharacterSchema>
 
@@ -58,7 +60,9 @@ export async function fetchAgentMetadata(
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      console.warn(`[IPFS] Failed to fetch metadata for agent ${agentId}: HTTP ${response.status}`)
+      console.warn(
+        `[IPFS] Failed to fetch metadata for agent ${agentId}: HTTP ${response.status}`,
+      )
       return null
     }
 
@@ -66,17 +70,24 @@ export async function fetchAgentMetadata(
     const result = AgentCharacterSchema.safeParse(data)
 
     if (!result.success) {
-      console.warn(`[IPFS] Invalid metadata for agent ${agentId}: ${result.error.message}`)
+      console.warn(
+        `[IPFS] Invalid metadata for agent ${agentId}: ${result.error.message}`,
+      )
       return null
     }
 
-    console.log(`[IPFS] Successfully fetched metadata for agent ${agentId}: name="${result.data.name}"`)
+    console.log(
+      `[IPFS] Successfully fetched metadata for agent ${agentId}: name="${result.data.name}"`,
+    )
     return result.data
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       console.warn(`[IPFS] Timeout fetching metadata for agent ${agentId}`)
     } else {
-      console.warn(`[IPFS] Error fetching metadata for agent ${agentId}:`, error)
+      console.warn(
+        `[IPFS] Error fetching metadata for agent ${agentId}:`,
+        error,
+      )
     }
     return null
   }

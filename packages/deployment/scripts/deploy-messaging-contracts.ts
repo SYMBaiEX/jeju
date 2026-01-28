@@ -255,16 +255,12 @@ async function main(): Promise<void> {
   Timestamp:         ${result.timestamp}
 
   Next Steps:
-  1. Update Terraform variables:
-     key_registry_address  = "${result.keyRegistry}"
-     node_registry_address = "${result.nodeRegistry}"
-
-  2. Update app .env:
+  1. Update app .env with contract addresses:
      KEY_REGISTRY_ADDRESS=${result.keyRegistry}
      NODE_REGISTRY_ADDRESS=${result.nodeRegistry}
 
-  3. Deploy messaging services:
-     cd packages/deployment && bun run scripts/helmfile.ts sync --only messaging
+  2. Deploy apps via DWS (permissionless):
+     NETWORK=testnet bun run packages/deployment/scripts/deploy/dws-bootstrap.ts
 `)
   console.log(
     '═══════════════════════════════════════════════════════════════════',

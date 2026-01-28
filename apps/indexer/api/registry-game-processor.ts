@@ -467,9 +467,13 @@ export async function processRegistryEvents(
           agent.name = metadata.name
           agent.description = metadata.description ?? null
           agent.tags = metadata.topics ?? []
-          console.log(`[Indexer] Updated metadata for agent ${agent.id}: name="${metadata.name}"`)
+          console.log(
+            `[Indexer] Updated metadata for agent ${agent.id}: name="${metadata.name}"`,
+          )
         } else {
-          console.warn(`[Indexer] Failed to fetch IPFS metadata for agent ${agent.id}, keeping tokenURI update only`)
+          console.warn(
+            `[Indexer] Failed to fetch IPFS metadata for agent ${agent.id}, keeping tokenURI update only`,
+          )
         }
       } else if (topic0 === METADATA_SET) {
         const args = decodeEventArgs<MetadataSetArgs>(

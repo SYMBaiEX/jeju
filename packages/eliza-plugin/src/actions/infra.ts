@@ -15,7 +15,11 @@ import type {
   UUID,
 } from '@elizaos/core'
 import { getDWSUrl } from '@jejunetwork/config'
-import { createAlert, formatAlert, type AlertSeverity } from '@jejunetwork/shared'
+import {
+  type AlertSeverity,
+  createAlert,
+  formatAlert,
+} from '@jejunetwork/shared'
 import { z } from 'zod'
 import { fetchWithTimeout } from '../validation'
 
@@ -82,7 +86,10 @@ async function measureLatency<T>(
   return { result, latencyMs: Date.now() - start }
 }
 
-async function fetchDwsHealth(): Promise<{ healthy: boolean; latencyMs: number }> {
+async function fetchDwsHealth(): Promise<{
+  healthy: boolean
+  latencyMs: number
+}> {
   try {
     const { result, latencyMs } = await measureLatency(async () => {
       const response = await fetchWithTimeout(
@@ -104,7 +111,10 @@ async function fetchDwsHealth(): Promise<{ healthy: boolean; latencyMs: number }
   }
 }
 
-async function fetchInferenceStats(): Promise<{ count: number; latencyMs: number }> {
+async function fetchInferenceStats(): Promise<{
+  count: number
+  latencyMs: number
+}> {
   try {
     const { result, latencyMs } = await measureLatency(async () => {
       const response = await fetchWithTimeout(
@@ -113,13 +123,18 @@ async function fetchInferenceStats(): Promise<{ count: number; latencyMs: number
         10000,
       )
       if (!response.ok) {
-        console.error(`[Infra] Failed to fetch node stats: HTTP ${response.status}`)
+        console.error(
+          `[Infra] Failed to fetch node stats: HTTP ${response.status}`,
+        )
         return null
       }
       const json = await response.json()
       const parsed = nodeStatsResponseSchema.safeParse(json)
       if (!parsed.success) {
-        console.error('[Infra] Node stats schema validation failed:', parsed.error.message)
+        console.error(
+          '[Infra] Node stats schema validation failed:',
+          parsed.error.message,
+        )
         console.error('[Infra] Received:', JSON.stringify(json))
       }
       return parsed
@@ -137,8 +152,12 @@ async function fetchInferenceStats(): Promise<{ count: number; latencyMs: number
 
 function formatSnapshot(snapshot: NodeSnapshot): string {
   const dwsStatus = snapshot.dws.healthy ? 'healthy' : 'unhealthy'
-  const dwsLatency = snapshot.dws.latencyMs >= 0 ? `${snapshot.dws.latencyMs}ms` : 'timeout'
-  const inferenceLatency = snapshot.inference.latencyMs >= 0 ? `${snapshot.inference.latencyMs}ms` : 'timeout'
+  const dwsLatency =
+    snapshot.dws.latencyMs >= 0 ? `${snapshot.dws.latencyMs}ms` : 'timeout'
+  const inferenceLatency =
+    snapshot.inference.latencyMs >= 0
+      ? `${snapshot.inference.latencyMs}ms`
+      : 'timeout'
 
   return `[NODE_SNAPSHOT | t=${snapshot.timestamp}]
 DWS: ${dwsStatus} (${dwsLatency})
@@ -204,13 +223,15 @@ export const collectNodeStatsAction: Action = {
 }
 
 // Snapshot parsing for analysis
-const snapshotPattern = /\[NODE_SNAPSHOT \| t=(\d+)\]\nDWS: (healthy|unhealthy) \((\d+|timeout)ms\)\nInference: (\d+) nodes \((\d+|timeout)ms\)/
+const snapshotPattern =
+  /\[NODE_SNAPSHOT \| t=(\d+)\]\nDWS: (healthy|unhealthy) \((\d+|timeout)ms\)\nInference: (\d+) nodes \((\d+|timeout)ms\)/
 
 function parseSnapshot(text: string): NodeSnapshot | null {
   const match = text.match(snapshotPattern)
   if (!match) return null
 
-  const [, timestamp, dwsStatus, dwsLatency, inferenceCount, inferenceLatency] = match
+  const [, timestamp, dwsStatus, dwsLatency, inferenceCount, inferenceLatency] =
+    match
   return {
     timestamp: parseInt(timestamp, 10),
     dws: {
@@ -219,7 +240,8 @@ function parseSnapshot(text: string): NodeSnapshot | null {
     },
     inference: {
       count: parseInt(inferenceCount, 10),
-      latencyMs: inferenceLatency === 'timeout' ? -1 : parseInt(inferenceLatency, 10),
+      latencyMs:
+        inferenceLatency === 'timeout' ? -1 : parseInt(inferenceLatency, 10),
     },
   }
 }
@@ -242,7 +264,8 @@ function parseSnapshotsFromText(text: string): NodeSnapshot[] {
 
   // Fall back to regex parsing if no JSON found
   if (snapshots.length === 0) {
-    const regex = /\[NODE_SNAPSHOT \| t=(\d+)\]\nDWS: (healthy|unhealthy) \((\d+|timeout)ms\)\nInference: (\d+) nodes \((\d+|timeout)ms\)/g
+    const regex =
+      /\[NODE_SNAPSHOT \| t=(\d+)\]\nDWS: (healthy|unhealthy) \((\d+|timeout)ms\)\nInference: (\d+) nodes \((\d+|timeout)ms\)/g
     for (const match of text.matchAll(regex)) {
       const snapshot = parseSnapshot(match[0])
       if (snapshot) snapshots.push(snapshot)
@@ -258,7 +281,13 @@ function analyzeSnapshots(snapshots: NodeSnapshot[]): InfraHealthResult {
   if (snapshots.length === 0) {
     return {
       status: 'degraded',
-      alerts: [{ type: 'threshold', severity: 'warning', message: 'No snapshots to analyze' }],
+      alerts: [
+        {
+          type: 'threshold',
+          severity: 'warning',
+          message: 'No snapshots to analyze',
+        },
+      ],
       recommendation: 'Collect infrastructure snapshots before analysis',
     }
   }
@@ -313,8 +342,14 @@ function analyzeSnapshots(snapshots: NodeSnapshot[]): InfraHealthResult {
     }
 
     // Check increasing latency
-    const dwsLatencies = recent.map((s) => s.dws.latencyMs).filter((l) => l >= 0)
-    if (dwsLatencies.length === 3 && dwsLatencies[0] < dwsLatencies[1] && dwsLatencies[1] < dwsLatencies[2]) {
+    const dwsLatencies = recent
+      .map((s) => s.dws.latencyMs)
+      .filter((l) => l >= 0)
+    if (
+      dwsLatencies.length === 3 &&
+      dwsLatencies[0] < dwsLatencies[1] &&
+      dwsLatencies[1] < dwsLatencies[2]
+    ) {
       alerts.push({
         type: 'trend',
         severity: 'warning',
@@ -332,10 +367,12 @@ function analyzeSnapshots(snapshots: NodeSnapshot[]): InfraHealthResult {
 
   if (hasCritical) {
     status = 'critical'
-    recommendation = 'Immediate attention required. Check DWS service and inference node availability.'
+    recommendation =
+      'Immediate attention required. Check DWS service and inference node availability.'
   } else if (hasWarning) {
     status = 'degraded'
-    recommendation = 'Monitor closely. Consider scaling inference nodes or investigating latency issues.'
+    recommendation =
+      'Monitor closely. Consider scaling inference nodes or investigating latency issues.'
   } else {
     status = 'healthy'
     recommendation = 'All systems operating normally.'
@@ -344,12 +381,19 @@ function analyzeSnapshots(snapshots: NodeSnapshot[]): InfraHealthResult {
   return { status, alerts, recommendation }
 }
 
-function mapSeverityToAlertSeverity(severity: 'critical' | 'warning'): AlertSeverity {
+function mapSeverityToAlertSeverity(
+  severity: 'critical' | 'warning',
+): AlertSeverity {
   return severity === 'critical' ? 'P0' : 'P1'
 }
 
-function formatHealthResult(result: InfraHealthResult, agentId = 'infra-analyzer'): string {
-  const lines: string[] = [`**Infrastructure Status: ${result.status.toUpperCase()}**\n`]
+function formatHealthResult(
+  result: InfraHealthResult,
+  agentId = 'infra-analyzer',
+): string {
+  const lines: string[] = [
+    `**Infrastructure Status: ${result.status.toUpperCase()}**\n`,
+  ]
 
   if (result.alerts.length > 0) {
     for (const infraAlert of result.alerts) {

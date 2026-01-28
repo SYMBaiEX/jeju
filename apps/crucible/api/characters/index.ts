@@ -2,11 +2,19 @@ import type { AgentCharacter } from '../../lib/types'
 import type { AutonomousAgentConfig } from '../autonomous/types'
 import { ROOMS } from '../constants'
 import { blockscoutWatcherCharacter } from './blockscout-watcher'
+import { blueTeamCharacter } from './blue-team'
 import { communityManagerCharacter } from './community-manager'
 import { dailyDigestCharacter } from './daily-digest'
+import { devRelCharacter } from './devrel'
 import { infraMonitorCharacter } from './infra-monitor'
+import { liaisonCharacter } from './liaison'
+import { moderatorCharacter } from './moderator'
+import { projectManagerCharacter } from './project-manager'
+import { qaEngineerCharacter } from './qa-engineer'
+import { redTeamCharacter } from './red-team'
 import { registrationWatcherCharacter } from './registration-watcher'
 import { securityAnalystCharacter } from './security-analyst'
+import { socialMediaManagerCharacter } from './social-media-manager'
 import { testComputerCharacter } from './test-computer'
 import { testCoordinatorCharacter } from './test-coordinator'
 import { testStorageCharacter } from './test-storage'
@@ -16,6 +24,14 @@ import { testVoterCharacter } from './test-voter'
 export const characters: Record<string, AgentCharacter> = {
   'community-manager': communityManagerCharacter,
   'daily-digest': dailyDigestCharacter,
+  devrel: devRelCharacter,
+  liaison: liaisonCharacter,
+  'social-media-manager': socialMediaManagerCharacter,
+  'red-team': redTeamCharacter,
+  'blue-team': blueTeamCharacter,
+  'qa-engineer': qaEngineerCharacter,
+  moderator: moderatorCharacter,
+  'project-manager': projectManagerCharacter,
   'security-analyst': securityAnalystCharacter,
   'blockscout-watcher': blockscoutWatcherCharacter,
   'infra-monitor': infraMonitorCharacter,
@@ -125,11 +141,19 @@ export function listCharacters(): string[] {
 }
 
 export { blockscoutWatcherCharacter } from './blockscout-watcher'
+export { blueTeamCharacter } from './blue-team'
 export { communityManagerCharacter } from './community-manager'
 export { dailyDigestCharacter } from './daily-digest'
+export { devRelCharacter } from './devrel'
 export { infraMonitorCharacter } from './infra-monitor'
-export { securityAnalystCharacter } from './security-analyst'
+export { liaisonCharacter } from './liaison'
+export { moderatorCharacter } from './moderator'
+export { projectManagerCharacter } from './project-manager'
+export { qaEngineerCharacter } from './qa-engineer'
+export { redTeamCharacter } from './red-team'
 export { registrationWatcherCharacter } from './registration-watcher'
+export { securityAnalystCharacter } from './security-analyst'
+export { socialMediaManagerCharacter } from './social-media-manager'
 export { testComputerCharacter } from './test-computer'
 export { testCoordinatorCharacter } from './test-coordinator'
 export { testStorageCharacter } from './test-storage'

@@ -23,6 +23,8 @@
     "vendor",
     "vendor_examples",
     "packages/workerd",
+    "packages/workerd-original",
+    "**/bazel-*",
     "8004",
     "**/*.test.ts"
   ]

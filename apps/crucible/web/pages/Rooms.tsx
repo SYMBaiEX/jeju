@@ -391,7 +391,10 @@ function RoomCard({ room }: RoomCardProps) {
             </span>
             <div className="flex gap-2">
               {room.source === 'offchain' && (
-                <span className="badge badge-ghost text-xs" title="Off-chain room">
+                <span
+                  className="badge badge-ghost text-xs"
+                  title="Off-chain room"
+                >
                   Local
                 </span>
               )}

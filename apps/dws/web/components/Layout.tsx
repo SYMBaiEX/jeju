@@ -1,4 +1,5 @@
-import { WalletButton } from '@jejunetwork/ui'
+import { AuthProvider } from '@jejunetwork/auth'
+import { LoginModal, useJejuAuth } from '@jejunetwork/auth/react'
 import {
   BarChart3,
   Bell,
@@ -315,6 +316,8 @@ export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [loginOpen, setLoginOpen] = useState(false)
+  const { authenticated, loading, walletAddress, logout } = useJejuAuth()
 
   // Close sidebar when route changes (mobile)
   const prevPathRef = useRef(location.pathname)
@@ -530,7 +533,24 @@ export default function Layout({ children }: LayoutProps) {
               <Bell size={18} />
             </button>
 
-            <WalletButton />
+            {authenticated && walletAddress ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => logout()}
+              >
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setLoginOpen(true)}
+                disabled={loading}
+              >
+                {loading ? 'Connecting...' : 'Sign In'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -584,6 +604,24 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
       )}
+
+      <LoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => setLoginOpen(false)}
+        title="Sign In"
+        subtitle="Use wallet or passkey"
+        providers={[
+          AuthProvider.WALLET,
+          AuthProvider.PASSKEY,
+          AuthProvider.FARCASTER,
+          AuthProvider.GOOGLE,
+          AuthProvider.GITHUB,
+          AuthProvider.TWITTER,
+          AuthProvider.DISCORD,
+        ]}
+        showEmailPhone={false}
+      />
     </div>
   )
 }

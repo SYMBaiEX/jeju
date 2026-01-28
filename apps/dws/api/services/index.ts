@@ -220,7 +220,8 @@ export interface ServiceInstance {
 function getServicePassword(envVar: string, serviceName: string): string {
   const password = process.env[envVar]
   if (!password) {
-    if (isProductionEnv()) {
+    // Allow default passwords on localnet even if NODE_ENV=production
+    if (isProductionEnv() && !isLocalnet()) {
       throw new Error(
         `CRITICAL: ${envVar} must be set in production. ${serviceName} cannot be deployed with default credentials.`,
       )
@@ -374,6 +375,12 @@ export async function discoverExistingServices(): Promise<void> {
 
   // First, load from SQLit persistence
   await loadPersistedServices()
+
+  if (process.env.KUBERNETES_SERVICE_HOST) {
+    console.log('[Services] Skipping Docker discovery in Kubernetes')
+    discoveryComplete = true
+    return
+  }
 
   // List all containers with dws- prefix (including stopped ones)
   const result = await dockerCommand([

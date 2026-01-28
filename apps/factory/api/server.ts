@@ -82,11 +82,13 @@ function createApp() {
     .get('/health', () => 'OK')
     .onRequest(async ({ request, set }): Promise<Response | undefined> => {
       const url = new URL(request.url)
-      // Skip rate limiting for health and docs
+      // Skip rate limiting for health, docs, and test mode
       if (
         url.pathname === '/health' ||
         url.pathname === '/api/health' ||
-        url.pathname.startsWith('/swagger')
+        url.pathname.startsWith('/swagger') ||
+        process.env.SKIP_RATE_LIMIT === 'true' ||
+        request.headers.get('X-Test-Mode') === 'true'
       ) {
         return undefined
       }

@@ -60,6 +60,7 @@ test.describe('Deploy Agent', () => {
 })
 
 test.describe('Agent Detail', () => {
+  test.skip(isRemote, 'Skipping agent detail on remote network')
   test('displays agent detail page', async ({ page }) => {
     await page.goto('/agents/1')
     await expect(page.getByRole('main')).toBeVisible()
@@ -74,6 +75,7 @@ test.describe('Agent Detail', () => {
 })
 
 test.describe('Agent Filters', () => {
+  test.skip(isRemote, 'Skipping agent filters on remote network')
   test('filters by agent type', async ({ page }) => {
     await page.goto('/agents')
     const filterButtons = page

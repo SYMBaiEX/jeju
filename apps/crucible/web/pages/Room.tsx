@@ -312,7 +312,7 @@ export default function RoomPage() {
                   msg.agentId === walletAddress ||
                   msg.agentId === userId ||
                   msg.agentId === 'user' ||
-                  (msg.agentId && msg.agentId.startsWith('user-'))
+                  msg.agentId?.startsWith('user-')
                 const member = room.members.find(
                   (m) => String(m.agentId) === msg.agentId,
                 )
@@ -453,12 +453,14 @@ export default function RoomPage() {
                 <div className="space-y-3">
                   <div>
                     <label
+                      htmlFor="room-add-agent-select"
                       className="text-xs font-medium block mb-1"
                       style={{ color: 'var(--text-secondary)' }}
                     >
                       Select Agent
                     </label>
                     <select
+                      id="room-add-agent-select"
                       value={selectedAgentId}
                       onChange={(e) => setSelectedAgentId(e.target.value)}
                       className="input w-full text-sm"
@@ -473,12 +475,14 @@ export default function RoomPage() {
                   </div>
                   <div>
                     <label
+                      htmlFor="room-add-agent-role"
                       className="text-xs font-medium block mb-1"
                       style={{ color: 'var(--text-secondary)' }}
                     >
                       Role
                     </label>
                     <select
+                      id="room-add-agent-role"
                       value={selectedRole}
                       onChange={(e) =>
                         setSelectedRole(e.target.value as AgentRole)
@@ -555,10 +559,13 @@ export default function RoomPage() {
                               : 'var(--text-tertiary)',
                             borderColor: 'var(--bg-secondary)',
                           }}
-                          aria-label={isActive ? 'Active' : 'Inactive'}
+                          aria-hidden="true"
                         />
                       </div>
                       <div className="flex-1 min-w-0">
+                        <span className="sr-only">
+                          {isActive ? 'Active' : 'Inactive'}
+                        </span>
                         <p
                           className="text-sm font-medium truncate"
                           style={{ color: 'var(--text-primary)' }}

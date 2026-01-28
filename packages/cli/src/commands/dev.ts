@@ -232,8 +232,14 @@ async function deployAppsOnchain(
         JNS_REGISTRY_ADDRESS: dwsContracts.jnsRegistry,
         JNS_RESOLVER_ADDRESS: dwsContracts.jnsResolver,
         FARCASTER_HUB_URL: getFarcasterHubUrl(),
+        // SQLit config for DWS workers (inherits to all workers via SAFE_ENV_KEYS)
+        SQLIT_ENDPOINT: getSQLitBlockProducerUrl(),
+        SQLIT_NODES: getSQLitBlockProducerUrl(),
+        SQLIT_URL: getSQLitBlockProducerUrl(),
+        // Workers derive their database ID from app name or use this default
+        SQLIT_DATABASE_ID: process.env.SQLIT_DATABASE_ID ?? 'dws-localnet',
       },
-      stdio: 'pipe',
+      stdio: 'inherit',
     })
 
     runningServices.push({
@@ -297,7 +303,7 @@ async function deployAppsOnchain(
         RPC_URL: rpcUrl,
         NODE_ENV: 'development',
       },
-      stdio: 'pipe',
+      stdio: 'inherit',
     })
 
     runningServices.push({
@@ -320,23 +326,22 @@ async function deployAppsOnchain(
       : join(rootDir, 'apps', folderName)
     return { dir, manifest: app }
   })
-
+  logger.step('Registering apps on-chain...')
   await localDeployOrchestrator.deployAllApps(appsWithDirs)
 
-  // Start vendor app backend workers in parallel
-  logger.step('Starting vendor app backends in parallel...')
-  const vendorAppsWithBackend = appsWithDirs.filter(
-    ({ manifest }) =>
-      manifest.type === 'vendor' && manifest.architecture?.backend,
+  // Start app backend workers in parallel (for apps with backend architecture)
+  logger.step('Starting app backends in parallel...')
+  const appsWithBackend = appsWithDirs.filter(
+    ({ manifest }) => manifest.architecture?.backend,
   )
 
-  const backendStartTasks = vendorAppsWithBackend.map(({ dir, manifest }) => {
+  const backendStartTasks = appsWithBackend.map(({ dir, manifest }) => {
     const backend = manifest.architecture?.backend
     const commands = manifest.commands as Record<string, string> | undefined
     const startCmd =
       typeof backend === 'object' && 'startCmd' in backend
         ? (backend.startCmd as string)
-        : commands?.['start:worker']
+        : (commands?.['dev:worker'] ?? commands?.['start:worker'])
 
     if (!startCmd) {
       logger.debug(`  ${manifest.name}: No backend start command found`)
@@ -348,7 +353,28 @@ async function deployAppsOnchain(
 
     logger.debug(`  Starting ${manifest.name} backend on port ${apiPort}...`)
 
-    const workerProc = execa('bun', ['run', startCmd.replace('bun run ', '')], {
+    // Parse the start command - handle different formats:
+    // - "bun api/server.ts" -> execa('bun', ['api/server.ts'])
+    // - "bun run start:worker" -> execa('bun', ['run', 'start:worker'])
+    // - "start:worker" -> execa('bun', ['run', 'start:worker'])
+    let bunArgs: string[]
+    if (startCmd.startsWith('bun run ')) {
+      // Full "bun run script" command
+      bunArgs = ['run', startCmd.slice(8)]
+    } else if (startCmd.startsWith('bun ')) {
+      // Direct "bun file.ts" command - run as-is
+      bunArgs = startCmd.slice(4).split(' ')
+    } else {
+      // Assume it's a package.json script name
+      bunArgs = ['run', startCmd]
+    }
+
+    // Get app-specific database ID (provisioned during deployAllApps)
+    // localDeployOrchestrator is guaranteed to be non-null here since we're inside deployAppsOnchain
+    const appDatabaseId = localDeployOrchestrator?.getDatabaseId(manifest.name)
+    const databaseId = appDatabaseId ?? `${manifest.name}-db`
+
+    const workerProc = execa('bun', bunArgs, {
       cwd: dir,
       env: {
         ...process.env,
@@ -357,7 +383,12 @@ async function deployAppsOnchain(
         JEJU_DWS_ENDPOINT: `http://${getLocalhostHost()}:4030`,
         JEJU_NETWORK: 'localnet',
         TEE_PROVIDER: 'local',
+        // SQLit config - app-specific database
+        SQLIT_ENDPOINT: getSQLitBlockProducerUrl(),
+        SQLIT_URL: getSQLitBlockProducerUrl(),
         SQLIT_BLOCK_PRODUCER_ENDPOINT: getSQLitBlockProducerUrl(),
+        SQLIT_DATABASE_ID: databaseId,
+        // DWS contract addresses
         WORKER_REGISTRY_ADDRESS: dwsContracts.workerRegistry,
         STORAGE_MANAGER_ADDRESS: dwsContracts.storageManager,
         CDN_REGISTRY_ADDRESS: dwsContracts.cdnRegistry,
@@ -373,7 +404,7 @@ async function deployAppsOnchain(
         BASE_SEPOLIA_RPC_URL:
           process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
       },
-      stdio: 'pipe',
+      stdio: 'inherit',
     })
 
     runningServices.push({
@@ -473,9 +504,8 @@ function setupSignalHandlers(): void {
         service.process.kill('SIGTERM')
       }
     }
-
     await execa('docker', ['compose', 'down'], {
-      cwd: join(process.cwd(), 'apps/monitoring'),
+      cwd: join(findMonorepoRoot(), 'packages/monitoring'),
       reject: false,
     }).catch(() => undefined)
 
@@ -788,7 +818,7 @@ async function runAppSeeds(rootDir: string, rpcUrl: string): Promise<void> {
           ...process.env,
           JEJU_RPC_URL: rpcUrl,
         },
-        stdio: 'pipe',
+        stdio: 'inherit',
       })
       logger.success(`Seeded ${appName}`)
     } catch (_error) {

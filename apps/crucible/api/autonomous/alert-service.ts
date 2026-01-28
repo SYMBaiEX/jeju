@@ -4,12 +4,12 @@
 
 import {
   type Alert,
-  type AlertSeverity,
   type AlertCategory,
+  type AlertSeverity,
   createAlert,
+  formatAck,
   formatAlert,
   parseAck,
-  formatAck,
 } from '@jejunetwork/shared'
 import { getAlertStore } from './alert-store'
 
@@ -25,13 +25,27 @@ export interface PostAlertParams {
 class AlertService {
   private escalationIntervalId: ReturnType<typeof setInterval> | null = null
   private escalationIntervalMs = 60_000 // Check every minute
-  private postToRoom: ((roomId: string, agentId: string, content: string, action?: string) => Promise<void>) | null = null
+  private postToRoom:
+    | ((
+        roomId: string,
+        agentId: string,
+        content: string,
+        action?: string,
+      ) => Promise<void>)
+    | null = null
 
   /**
    * Set the function to post messages to rooms.
    * This is injected from the autonomous runner.
    */
-  setPostToRoom(fn: (roomId: string, agentId: string, content: string, action?: string) => Promise<void>): void {
+  setPostToRoom(
+    fn: (
+      roomId: string,
+      agentId: string,
+      content: string,
+      action?: string,
+    ) => Promise<void>,
+  ): void {
     this.postToRoom = fn
   }
 
@@ -46,7 +60,12 @@ class AlertService {
 
     if (this.postToRoom) {
       const formattedMessage = formatAlert(alert)
-      await this.postToRoom(params.roomId, params.source, formattedMessage, 'ALERT')
+      await this.postToRoom(
+        params.roomId,
+        params.source,
+        formattedMessage,
+        'ALERT',
+      )
     }
 
     console.log('[AlertService] Alert posted', {
@@ -87,7 +106,7 @@ class AlertService {
 
     this.escalationIntervalId = setInterval(
       () => this.checkAndEscalate(),
-      this.escalationIntervalMs
+      this.escalationIntervalMs,
     )
 
     console.log('[AlertService] Escalation loop started')
@@ -113,18 +132,23 @@ class AlertService {
 
     if (alertsToEscalate.length === 0) return
 
-    console.log('[AlertService] Escalating alerts', { count: alertsToEscalate.length })
+    console.log('[AlertService] Escalating alerts', {
+      count: alertsToEscalate.length,
+    })
 
     for (const alert of alertsToEscalate) {
       const escalationPrefix = `[ESCALATION #${alert.escalationCount + 1}] `
-      const escalatedAlert = { ...alert, message: escalationPrefix + alert.message }
+      const escalatedAlert = {
+        ...alert,
+        message: escalationPrefix + alert.message,
+      }
 
       if (this.postToRoom) {
         await this.postToRoom(
           alert.roomId,
           'system',
           formatAlert(escalatedAlert),
-          'ESCALATE'
+          'ESCALATE',
         )
       }
 

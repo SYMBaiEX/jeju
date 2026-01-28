@@ -1,4 +1,5 @@
-import { WalletButton } from '@jejunetwork/ui'
+import { AuthProvider } from '@jejunetwork/auth'
+import { LoginModal, useJejuAuth } from '@jejunetwork/auth/react'
 import {
   Activity,
   Book,
@@ -124,12 +125,14 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const { authenticated, loading, walletAddress, logout } = useJejuAuth()
   const { isConnected } = useAccount()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedGroup, setExpandedGroup] = useState<string | null>(
     'Get Started',
   )
+  const [loginOpen, setLoginOpen] = useState(false)
 
   const currentPath = location.pathname || '/registry'
 
@@ -160,7 +163,24 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="header-actions">
             <ThemeToggle />
-            <WalletButton />
+            {authenticated && walletAddress ? (
+              <button
+                type="button"
+                className="nav-link"
+                onClick={() => logout()}
+              >
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="nav-link"
+                onClick={() => setLoginOpen(true)}
+                disabled={loading}
+              >
+                {loading ? 'Connecting...' : 'Sign In'}
+              </button>
+            )}
             <button
               type="button"
               className="mobile-menu-btn"
@@ -265,6 +285,24 @@ export default function Layout({ children }: LayoutProps) {
           </Link>
         ))}
       </nav>
+
+      <LoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => setLoginOpen(false)}
+        title="Sign In"
+        subtitle="Use wallet or passkey"
+        providers={[
+          AuthProvider.WALLET,
+          AuthProvider.PASSKEY,
+          AuthProvider.FARCASTER,
+          AuthProvider.GOOGLE,
+          AuthProvider.GITHUB,
+          AuthProvider.TWITTER,
+          AuthProvider.DISCORD,
+        ]}
+        showEmailPhone={false}
+      />
 
       <style>{`
         .layout {

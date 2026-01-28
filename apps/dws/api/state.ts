@@ -13,6 +13,7 @@ import {
 } from '@jejunetwork/db'
 import { type CacheClient, getCacheClient } from '@jejunetwork/shared'
 import type { Address } from 'viem'
+import { z } from 'zod'
 
 const SQLIT_DATABASE_ID = process.env.SQLIT_DATABASE_ID ?? 'dws'
 
@@ -195,8 +196,8 @@ async function getSQLitClient(): Promise<MinimalSQLitClient> {
     if (!healthy) {
       sqlitClient = null
 
-      // On testnet with fallback enabled, or when DWS_SQLIT_FALLBACK=1, use memory mode
-      if (allowSQLitFallback || network === 'testnet') {
+      // Only allow memory fallback when explicitly requested
+      if (allowSQLitFallback) {
         console.warn(
           `[DWS State] SQLit unavailable at ${endpoint}, falling back to memory mode`,
         )
@@ -396,6 +397,7 @@ async function ensureTablesExist(): Promise<void> {
       static_files TEXT,
       backend_worker_id TEXT,
       backend_endpoint TEXT,
+      env TEXT NOT NULL DEFAULT '{}',
       api_paths TEXT NOT NULL DEFAULT '[]',
       spa INTEGER NOT NULL DEFAULT 1,
       enabled INTEGER NOT NULL DEFAULT 1,
@@ -417,6 +419,23 @@ async function ensureTablesExist(): Promise<void> {
       invocation_count INTEGER NOT NULL DEFAULT 0,
       avg_duration_ms INTEGER NOT NULL DEFAULT 0,
       error_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS dws_workerd_workers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner TEXT NOT NULL,
+      code_cid TEXT NOT NULL,
+      main_module TEXT NOT NULL DEFAULT 'worker.js',
+      memory_mb INTEGER NOT NULL DEFAULT 128,
+      timeout_ms INTEGER NOT NULL DEFAULT 30000,
+      cpu_time_ms INTEGER NOT NULL DEFAULT 50,
+      compatibility_date TEXT NOT NULL DEFAULT '2024-01-01',
+      compatibility_flags TEXT NOT NULL DEFAULT '[]',
+      bindings TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      version INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )`,
@@ -521,6 +540,9 @@ async function ensureTablesExist(): Promise<void> {
     'CREATE INDEX IF NOT EXISTS idx_dws_workers_owner ON dws_workers(owner)',
     'CREATE INDEX IF NOT EXISTS idx_dws_workers_name ON dws_workers(name)',
     'CREATE INDEX IF NOT EXISTS idx_dws_workers_status ON dws_workers(status)',
+    'CREATE INDEX IF NOT EXISTS idx_dws_workerd_workers_name ON dws_workerd_workers(name)',
+    'CREATE INDEX IF NOT EXISTS idx_dws_workerd_workers_status ON dws_workerd_workers(status)',
+    'CREATE INDEX IF NOT EXISTS idx_dws_workerd_workers_code_cid ON dws_workerd_workers(code_cid)',
     'CREATE INDEX IF NOT EXISTS idx_dws_worker_versions_worker ON dws_worker_versions(worker_id)',
     'CREATE INDEX IF NOT EXISTS idx_dws_worker_crons_worker ON dws_worker_crons(worker_id)',
     'CREATE INDEX IF NOT EXISTS idx_dws_worker_crons_enabled ON dws_worker_crons(enabled)',
@@ -541,6 +563,20 @@ async function ensureTablesExist(): Promise<void> {
 
   for (const idx of indexes) {
     await sqlitClient.exec(idx, [], SQLIT_DATABASE_ID)
+  }
+
+  const deployedAppsInfo = await sqlitClient.query<{ name: string }>(
+    'PRAGMA table_info(deployed_apps)',
+    [],
+    SQLIT_DATABASE_ID,
+  )
+  const hasEnvColumn = deployedAppsInfo.rows.some((row) => row.name === 'env')
+  if (!hasEnvColumn) {
+    await sqlitClient.exec(
+      "ALTER TABLE deployed_apps ADD COLUMN env TEXT NOT NULL DEFAULT '{}'",
+      [],
+      SQLIT_DATABASE_ID,
+    )
   }
 
   console.log('[DWS State] SQLit tables ensured')
@@ -1943,6 +1979,7 @@ interface DeployedAppRow {
   static_files: string | null
   backend_worker_id: string | null
   backend_endpoint: string | null
+  env: string
   api_paths: string
   spa: number
   enabled: number
@@ -1959,6 +1996,7 @@ export const deployedAppState = {
     staticFiles: Record<string, string> | null
     backendWorkerId: string | null
     backendEndpoint: string | null
+    env: Record<string, string>
     apiPaths: string[]
     spa: boolean
     enabled: boolean
@@ -1976,6 +2014,7 @@ export const deployedAppState = {
       static_files: app.staticFiles ? JSON.stringify(app.staticFiles) : null,
       backend_worker_id: app.backendWorkerId,
       backend_endpoint: app.backendEndpoint,
+      env: JSON.stringify(app.env),
       api_paths: JSON.stringify(app.apiPaths),
       spa: app.spa ? 1 : 0,
       enabled: app.enabled ? 1 : 0,
@@ -1984,14 +2023,15 @@ export const deployedAppState = {
     }
 
     await client.exec(
-      `INSERT INTO deployed_apps (name, jns_name, frontend_cid, static_files, backend_worker_id, backend_endpoint, api_paths, spa, enabled, deployed_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO deployed_apps (name, jns_name, frontend_cid, static_files, backend_worker_id, backend_endpoint, env, api_paths, spa, enabled, deployed_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET
        jns_name = excluded.jns_name,
        frontend_cid = excluded.frontend_cid,
        static_files = excluded.static_files,
        backend_worker_id = excluded.backend_worker_id,
        backend_endpoint = excluded.backend_endpoint,
+       env = excluded.env,
        api_paths = excluded.api_paths,
        spa = excluded.spa,
        enabled = excluded.enabled,
@@ -2003,6 +2043,7 @@ export const deployedAppState = {
         row.static_files,
         row.backend_worker_id,
         row.backend_endpoint,
+        row.env,
         row.api_paths,
         row.spa,
         row.enabled,
@@ -2097,7 +2138,7 @@ export interface DWSWorker {
   id: string
   name: string
   owner: string
-  runtime: 'bun' | 'node' | 'deno'
+  runtime: 'bun' | 'node' | 'deno' | 'workerd'
   handler: string
   codeCid: string
   memory: number
@@ -2117,7 +2158,7 @@ function rowToWorker(row: DWSWorkerRow): DWSWorker {
     id: row.id,
     name: row.name,
     owner: row.owner,
-    runtime: row.runtime as 'bun' | 'node' | 'deno',
+    runtime: row.runtime as 'bun' | 'node' | 'deno' | 'workerd',
     handler: row.handler,
     codeCid: row.code_cid,
     memory: row.memory,
@@ -2128,6 +2169,79 @@ function rowToWorker(row: DWSWorkerRow): DWSWorker {
     invocationCount: row.invocation_count,
     avgDurationMs: row.avg_duration_ms,
     errorCount: row.error_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+interface DWSWorkerdWorkerRow {
+  id: string
+  name: string
+  owner: string
+  code_cid: string
+  main_module: string
+  memory_mb: number
+  timeout_ms: number
+  cpu_time_ms: number
+  compatibility_date: string
+  compatibility_flags: string
+  bindings: string
+  status: string
+  version: number
+  created_at: number
+  updated_at: number
+}
+
+export interface DWSWorkerdWorker {
+  id: string
+  name: string
+  owner: Address
+  codeCid: string
+  mainModule: string
+  memoryMb: number
+  timeoutMs: number
+  cpuTimeMs: number
+  compatibilityDate: string
+  compatibilityFlags: string[]
+  bindings: Array<{
+    name: string
+    type: 'text' | 'json' | 'data' | 'service'
+    value?: string | Record<string, string>
+    service?: string
+  }>
+  status: 'active' | 'inactive' | 'error'
+  version: number
+  createdAt: number
+  updatedAt: number
+}
+
+const WorkerdCompatibilityFlagsSchema = z.array(z.string())
+const WorkerdBindingsSchema = z.array(
+  z.object({
+    name: z.string(),
+    type: z.enum(['text', 'json', 'data', 'service']),
+    value: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+    service: z.string().optional(),
+  }),
+)
+
+function rowToWorkerdWorker(row: DWSWorkerdWorkerRow): DWSWorkerdWorker {
+  return {
+    id: row.id,
+    name: row.name,
+    owner: row.owner as Address,
+    codeCid: row.code_cid,
+    mainModule: row.main_module,
+    memoryMb: row.memory_mb,
+    timeoutMs: row.timeout_ms,
+    cpuTimeMs: row.cpu_time_ms,
+    compatibilityDate: row.compatibility_date,
+    compatibilityFlags: WorkerdCompatibilityFlagsSchema.parse(
+      JSON.parse(row.compatibility_flags),
+    ),
+    bindings: WorkerdBindingsSchema.parse(JSON.parse(row.bindings)),
+    status: row.status as 'active' | 'inactive' | 'error',
+    version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -2283,6 +2397,98 @@ export const dwsWorkerState = {
     )
     const row = result.rows[0]
     return row ? rowToWorker(row) : null
+  },
+}
+
+export const dwsWorkerdWorkerState = {
+  async save(worker: DWSWorkerdWorker): Promise<void> {
+    const client = await getSQLitClient()
+    const now = Date.now()
+
+    await client.exec(
+      `INSERT OR REPLACE INTO dws_workerd_workers (
+        id, name, owner, code_cid, main_module, memory_mb, timeout_ms,
+        cpu_time_ms, compatibility_date, compatibility_flags, bindings,
+        status, version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        worker.id,
+        worker.name,
+        worker.owner,
+        worker.codeCid,
+        worker.mainModule,
+        worker.memoryMb,
+        worker.timeoutMs,
+        worker.cpuTimeMs,
+        worker.compatibilityDate,
+        JSON.stringify(worker.compatibilityFlags),
+        JSON.stringify(worker.bindings),
+        worker.status,
+        worker.version,
+        worker.createdAt ?? now,
+        now,
+      ],
+      SQLIT_DATABASE_ID,
+    )
+
+    console.log(
+      `[DWSWorkerdWorkerState] Saved workerd worker: ${worker.name} (${worker.id}) - codeCid: ${worker.codeCid}`,
+    )
+  },
+
+  async get(id: string): Promise<DWSWorkerdWorker | null> {
+    const client = await getSQLitClient()
+    const result = await client.query<DWSWorkerdWorkerRow>(
+      'SELECT * FROM dws_workerd_workers WHERE id = ?',
+      [id],
+      SQLIT_DATABASE_ID,
+    )
+    const row = result.rows[0]
+    return row ? rowToWorkerdWorker(row) : null
+  },
+
+  async getByCodeCid(codeCid: string): Promise<DWSWorkerdWorker | null> {
+    const client = await getSQLitClient()
+    const result = await client.query<DWSWorkerdWorkerRow>(
+      'SELECT * FROM dws_workerd_workers WHERE code_cid = ? ORDER BY updated_at DESC LIMIT 1',
+      [codeCid],
+      SQLIT_DATABASE_ID,
+    )
+    const row = result.rows[0]
+    return row ? rowToWorkerdWorker(row) : null
+  },
+
+  async listActive(): Promise<DWSWorkerdWorker[]> {
+    const client = await getSQLitClient()
+    const result = await client.query<DWSWorkerdWorkerRow>(
+      "SELECT * FROM dws_workerd_workers WHERE status = 'active' ORDER BY updated_at DESC",
+      [],
+      SQLIT_DATABASE_ID,
+    )
+    return result.rows.map(rowToWorkerdWorker)
+  },
+
+  async delete(id: string): Promise<boolean> {
+    const client = await getSQLitClient()
+    const result = await client.exec(
+      'DELETE FROM dws_workerd_workers WHERE id = ?',
+      [id],
+      SQLIT_DATABASE_ID,
+    )
+    return result.rowsAffected > 0
+  },
+
+  async updateStatus(
+    id: string,
+    status: 'active' | 'inactive' | 'error',
+  ): Promise<boolean> {
+    const client = await getSQLitClient()
+    const result = await client.exec(
+      'UPDATE dws_workerd_workers SET status = ?, updated_at = ? WHERE id = ?',
+      [status, Date.now(), id],
+      SQLIT_DATABASE_ID,
+    )
+    return result.rowsAffected > 0
   },
 }
 
@@ -3558,7 +3764,6 @@ export const creditTransactionState = {
 // Allow memory-only mode when:
 // - DWS_TEST_MODE=1 (explicit test mode)
 // - DWS_SQLIT_FALLBACK=1 (allow fallback when SQLit unavailable)
-// - SQLit health check fails and we're on testnet (automatic fallback)
 let memoryOnlyMode = process.env.DWS_TEST_MODE === '1'
 const allowSQLitFallback = process.env.DWS_SQLIT_FALLBACK === '1'
 

@@ -1,4 +1,5 @@
-import { useJejuAuth } from '@jejunetwork/auth/react'
+import { AuthProvider } from '@jejunetwork/auth'
+import { LoginModal, useJejuAuth } from '@jejunetwork/auth/react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
@@ -18,13 +19,13 @@ export function Header() {
     authenticated,
     loading: authLoading,
     walletAddress,
-    loginWithWallet,
     logout,
   } = useJejuAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [isDark, setIsDark] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [loginOpen, setLoginOpen] = useState(false)
 
   // Initialize theme from localStorage/system preference
   useEffect(() => {
@@ -79,9 +80,9 @@ export function Header() {
     [pathname],
   )
 
-  const handleConnect = useCallback(async () => {
-    await loginWithWallet()
-  }, [loginWithWallet])
+  const handleConnect = useCallback(() => {
+    setLoginOpen(true)
+  }, [])
 
   const handleDisconnect = useCallback(async () => {
     await logout()
@@ -451,6 +452,24 @@ export function Header() {
           </div>
         </div>
       </nav>
+
+      <LoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => setLoginOpen(false)}
+        title="Sign In"
+        subtitle="Use wallet or passkey"
+        providers={[
+          AuthProvider.WALLET,
+          AuthProvider.PASSKEY,
+          AuthProvider.FARCASTER,
+          AuthProvider.GOOGLE,
+          AuthProvider.GITHUB,
+          AuthProvider.TWITTER,
+          AuthProvider.DISCORD,
+        ]}
+        showEmailPhone={false}
+      />
     </>
   )
 }

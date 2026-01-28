@@ -162,8 +162,6 @@ const BROWSER_EXTERNALS = [
   '@elysiajs/openapi',
   '@elysiajs/static',
   'ioredis',
-  'pino',
-  'pino-pretty',
   'typeorm',
   '@google-cloud/*',
   '@grpc/*',
@@ -317,15 +315,11 @@ const WORKER_EXTERNALS = [
   'node:crypto',
   // Farcaster hub uses native proto bindings
   '@farcaster/hub-nodejs',
-  // SQLit uses native bindings in some modes
-  '@jejunetwork/sqlit',
-  '@jejunetwork/db',
+  // SQLit is bundled for worker runtime
   // Other native packages
   'better-sqlite3',
   'libsql',
   '@libsql/*',
-  'pino',
-  'pino-pretty',
 ]
 
 async function buildWorker(): Promise<void> {

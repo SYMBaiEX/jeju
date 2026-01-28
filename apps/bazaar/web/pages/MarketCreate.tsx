@@ -606,7 +606,7 @@ export default function MarketCreatePage() {
           className="btn-primary w-full py-3 text-lg font-semibold disabled:opacity-50"
         >
           {!isConnected
-            ? 'Connect Wallet'
+            ? 'Sign In'
             : isPending
               ? 'Confirm in Wallet...'
               : isConfirming

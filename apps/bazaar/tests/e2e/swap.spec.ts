@@ -102,11 +102,11 @@ test.describe('Swap Page - Core UI', () => {
     expect(await swapButton.count()).toBeGreaterThan(0)
   })
 
-  test('displays Connect Wallet button when disconnected', async ({ page }) => {
+  test('displays Sign In button when disconnected', async ({ page }) => {
     await assertNoPageErrors(page)
 
     await expect(
-      page.getByRole('button', { name: /Connect Wallet|Enter Amount/i }),
+      page.getByRole('button', { name: /Sign In|Enter Amount/i }),
     ).toBeVisible()
   })
 
@@ -443,12 +443,12 @@ test.describe('Swap - Button States', () => {
     await navigateTo(page, '/swap')
   })
 
-  test('shows "Connect Wallet" when disconnected', async ({ page }) => {
+  test('shows "Sign In" when disconnected', async ({ page }) => {
     await assertNoPageErrors(page)
 
-    // Look for the main swap button (Connect Wallet or Enter Amount)
+    // Look for the main swap button (Sign In or Enter Amount)
     const connectButton = page
-      .getByRole('button', { name: /Connect Wallet/i })
+      .getByRole('button', { name: /Sign In/i })
       .last()
     const enterAmountButton = page.getByRole('button', {
       name: /Enter Amount/i,
@@ -477,7 +477,7 @@ test.describe('Swap - Button States', () => {
     if (await actionButton.isVisible()) {
       const buttonText = await actionButton.textContent()
       expect(
-        buttonText?.includes('Connect Wallet') ||
+        buttonText?.includes('Sign In') ||
           buttonText?.includes('Enter Amount') ||
           buttonText?.includes('Transfer'),
       ).toBe(true)
@@ -490,15 +490,15 @@ test.describe('Swap - Button States', () => {
   test('swap button is disabled when no wallet connected', async ({ page }) => {
     await assertNoPageErrors(page)
 
-    // Find the swap button specifically - the one with Connect Wallet text
+    // Find the swap button specifically - the one with Sign In text
     const swapButton = page
-      .getByRole('button', { name: /Connect Wallet/i })
+      .getByRole('button', { name: /Sign In/i })
       .last()
 
     if (await swapButton.isVisible()) {
       await expect(swapButton).toBeDisabled()
     } else {
-      // No Connect Wallet button - page might be in different state
+      // No Sign In button - page might be in different state
       await expect(page.locator('body')).toBeVisible()
     }
   })
@@ -563,7 +563,7 @@ test.describe('Swap - Cross-Chain UI', () => {
         const buttonText = await actionButton.textContent()
         expect(
           buttonText?.includes('Bridge') ||
-            buttonText?.includes('Connect') ||
+            buttonText?.includes('Sign In') ||
             buttonText?.includes('Ethereum'),
         ).toBe(true)
       }
@@ -582,8 +582,8 @@ test.describe('Swap - Mobile Responsive', () => {
     await expect(page.getByRole('heading', { name: /Swap/i })).toBeVisible()
     await expect(page.locator('input[type="number"]').first()).toBeVisible()
 
-    // Look for the Connect Wallet button specifically
-    const connectButton = page.getByRole('button', { name: /Connect Wallet/i })
+    // Look for the Sign In button specifically
+    const connectButton = page.getByRole('button', { name: /Sign In/i })
     const count = await connectButton.count()
     expect(count).toBeGreaterThan(0)
   })

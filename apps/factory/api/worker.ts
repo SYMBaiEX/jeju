@@ -4,7 +4,7 @@
  * DWS-deployable worker using Elysia.
  * Compatible with workerd runtime and DWS infrastructure.
  *
- * Note: This worker excludes routes that depend on native modules
+ * This worker excludes routes that depend on native modules
  * which can't run in DWS. XMTP now uses @xmtp/browser-sdk (WASM-based).
  * For full functionality, use the server.ts entry point.
  */
@@ -20,8 +20,9 @@ import {
   getLocalhostHost,
 } from '@jejunetwork/config'
 import { Elysia } from 'elysia'
+import { z } from 'zod'
 import { configureFactory, getFactoryConfig } from './config'
-import { closeDB, initDB } from './db/client'
+import { closeDB, initDB } from './db/sqlit-client'
 import { a2aRoutes } from './routes/a2a'
 import { agentsRoutes } from './routes/agents'
 import { bountiesRoutes } from './routes/bounties'
@@ -72,6 +73,7 @@ export interface FactoryEnv {
   SQLIT_NODES: string
   SQLIT_DATABASE_ID: string
   SQLIT_PRIVATE_KEY?: string
+  SKIP_RATE_LIMIT?: string
 }
 
 // Create Elysia App
@@ -90,10 +92,13 @@ export function createFactoryApp(env?: Partial<FactoryEnv>) {
     }))
     .onRequest(async ({ request, set }): Promise<Response | undefined> => {
       const url = new URL(request.url)
+      // Skip rate limiting for health, docs, and test mode
       if (
         url.pathname === '/health' ||
         url.pathname === '/api/health' ||
-        url.pathname.startsWith('/swagger')
+        url.pathname.startsWith('/swagger') ||
+        env?.SKIP_RATE_LIMIT === 'true' ||
+        request.headers.get('X-Test-Mode') === 'true'
       ) {
         return undefined
       }
@@ -208,6 +213,44 @@ interface ExecutionContext {
 
 let cachedApp: ReturnType<typeof createFactoryApp> | null = null
 let cachedEnvHash: string | null = null
+let dbInitialized = false
+let dbInitPromise: Promise<void> | null = null
+
+/**
+ * Initialize the database for module export mode.
+ * Called lazily on first request.
+ */
+async function ensureDbInitialized(env: FactoryEnv): Promise<void> {
+  if (dbInitialized) return
+
+  if (dbInitPromise) {
+    await dbInitPromise
+    return
+  }
+
+  dbInitPromise = (async () => {
+    if (!env.SQLIT_NODES) {
+      throw new Error('[factory] SQLIT_NODES is required')
+    }
+
+    if (!env.SQLIT_DATABASE_ID) {
+      throw new Error('[factory] SQLIT_DATABASE_ID is required')
+    }
+
+    // Configure factory with env vars from DWS
+    configureFactory({
+      sqlitEndpoint: env.SQLIT_NODES,
+      sqlitDatabaseId: env.SQLIT_DATABASE_ID,
+      isDev: env.NETWORK === 'localnet',
+    })
+
+    await initDB()
+    console.log('[factory] Database initialized')
+    dbInitialized = true
+  })()
+
+  await dbInitPromise
+}
 
 function getAppForEnv(env: FactoryEnv): ReturnType<typeof createFactoryApp> {
   const envHash = `${env.NETWORK}-${env.TEE_MODE}`
@@ -230,6 +273,80 @@ export default {
     env: FactoryEnv,
     _ctx: ExecutionContext,
   ): Promise<Response> {
+    const url = new URL(request.url)
+
+    if (url.pathname === '/invoke' && request.method === 'POST') {
+      const InvokePayloadSchema = z.object({
+        payload: z.object({
+          method: z.string(),
+          path: z.string(),
+          headers: z.record(z.string(), z.string()).optional(),
+          query: z.record(z.string(), z.string()).optional(),
+          body: z.string().nullable().optional(),
+        }),
+      })
+
+      const parsed = InvokePayloadSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid invoke payload' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+
+      await ensureDbInitialized(env)
+
+      const { method, path, headers, query, body } = parsed.data.payload
+      const search = query ? new URLSearchParams(query).toString() : ''
+      const targetUrl = `http://worker${path}${search ? `?${search}` : ''}`
+      const forwardHeaders = new Headers(headers ? headers : {})
+
+      const app = getAppForEnv(env)
+      const response = await app.handle(
+        new Request(targetUrl, {
+          method,
+          headers: forwardHeaders,
+          body: typeof body === 'string' ? body : undefined,
+        }),
+      )
+
+      const responseBody = await response.text()
+      const responseHeaders: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value
+      })
+
+      return new Response(
+        JSON.stringify({
+          result: {
+            statusCode: response.status,
+            headers: responseHeaders,
+            body: responseBody,
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Health check bypasses DB initialization for fast response
+    if (url.pathname === '/health') {
+      return new Response(
+        JSON.stringify({
+          status: 'ok',
+          service: 'factory-api',
+          teeMode: env.TEE_MODE ?? 'simulated',
+          teePlatform: env.TEE_PLATFORM ?? 'dws',
+          teeRegion: env.TEE_REGION ?? 'testnet',
+          network: env.NETWORK ?? 'testnet',
+          timestamp: new Date().toISOString(),
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Initialize database on first request (lazy init for module export mode)
+    await ensureDbInitialized(env)
+
     const app = getAppForEnv(env)
     return app.handle(request)
   },
@@ -270,6 +387,7 @@ if (isMainModule) {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
   const PORT = CORE_PORTS.FACTORY.get()
+  const host = getLocalhostHost()
 
   const app = createFactoryApp({
     NETWORK: getCurrentNetwork(),
@@ -285,8 +403,12 @@ if (isMainModule) {
     SQLIT_PRIVATE_KEY: config.sqlitPrivateKey,
   })
 
-  const host = getLocalhostHost()
-  app.listen(PORT, () => {
-    console.log(`Factory API Worker running at http://${host}:${PORT}`)
+  console.log(`Factory API Worker running at http://${host}:${PORT}`)
+
+  // Use Bun.serve() directly to prevent Bun from auto-serving the default export
+  Bun.serve({
+    port: PORT,
+    hostname: host,
+    fetch: app.fetch,
   })
 }

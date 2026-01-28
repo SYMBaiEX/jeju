@@ -10,7 +10,8 @@ export function expectValid<T>(
   data: unknown,
   message?: string,
 ): T {
-  const result = schema.safeParse(data)
+  const normalized = Array.isArray(data) ? {} : data
+  const result = schema.safeParse(normalized)
   if (!result.success) {
     const errorMessage =
       message ?? result.error.issues[0].message ?? 'Validation failed'

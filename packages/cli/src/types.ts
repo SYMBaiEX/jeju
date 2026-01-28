@@ -131,10 +131,21 @@ export interface AppManifest {
   architecture?: {
     type?: 'hybrid' | 'frontend' | 'backend'
     frontend?: boolean | { outputDir?: string; buildDir?: string }
-    backend?: boolean | { outputDir?: string }
+    backend?:
+      | boolean
+      | { outputDir?: string; entrypoint?: string; startCmd?: string }
   }
   /** Decentralization configuration */
   decentralization?: {
+    worker?: {
+      name: string
+      entrypoint: string
+      runtime?: 'bun' | 'workerd'
+      routes?: Array<{ pattern: string }>
+      compatibilityDate?: string
+      memory?: number
+      timeout?: number
+    }
     cdn?: {
       enabled?: boolean
       regions?: string[]
@@ -175,7 +186,26 @@ export interface AppManifest {
   /** DWS deployment configuration */
   dws?: {
     frontend?: { outputDir?: string }
-    backend?: { outputDir?: string }
+    backend?: {
+      enabled?: boolean
+      runtime?: 'bun' | 'workerd'
+      entrypoint?: string
+      outputDir?: string
+      memory?: number
+      timeout?: number
+      minInstances?: number
+      maxInstances?: number
+      teeRequired?: boolean
+      regions?: string[]
+    }
+    /** SQLit database configuration */
+    database?: {
+      enabled?: boolean
+      name?: string
+      consistency?: 'eventual' | 'strong'
+      replication?: number
+      regions?: string[]
+    }
   }
 }
 

@@ -1,11 +1,12 @@
-import { ZERO_ADDRESS } from '@jejunetwork/types'
 import {
+  type Abi,
   type Address,
   isAddress,
   type PublicClient,
   parseAbi,
   parseEther,
 } from 'viem'
+import { z } from 'zod'
 import type {
   AgentCharacter,
   AgentDefinition,
@@ -102,9 +103,9 @@ export class AgentSDK {
    */
   private async executeWrite(params: {
     address: Address
-    abi: readonly unknown[]
+    abi: Abi
     functionName: string
-    args?: readonly unknown[]
+    args?: readonly (Address | bigint | string | boolean | number)[]
     value?: bigint
   }): Promise<`0x${string}`> {
     if (!this.kmsSigner.isInitialized()) {
@@ -262,17 +263,13 @@ export class AgentSDK {
       args: [agentId],
     })
 
-    // Get name from character (stored in IPFS)
-    let name = `Agent ${agentId}`
-    if (characterCid) {
-      const character = await this.storage.loadCharacter(characterCid)
-      name = character.name
-    }
+    const character = characterCid
+      ? await this.storage.loadCharacter(characterCid)
+      : null
 
     // Infer botType from character or default to ai_agent
     let botType: 'ai_agent' | 'trading_bot' | 'org_tool' = 'ai_agent'
-    if (characterCid) {
-      const character = await this.storage.loadCharacter(characterCid)
+    if (character) {
       if (
         character.topics.includes('trading') ||
         character.topics.includes('arbitrage') ||
@@ -291,12 +288,12 @@ export class AgentSDK {
     return {
       agentId,
       owner: registration.owner,
-      name,
+      name: character?.name ?? `Agent ${agentId}`,
       botType,
       characterCid,
       stateCid,
       vaultAddress,
-      active: !registration.isBanned,
+      active: !registration.isBanned && !registration.isSlashed,
       registeredAt: Number(registration.registeredAt) * 1000,
       lastExecutedAt: Number(registration.lastActivityAt) * 1000,
       executionCount: 0,
@@ -483,6 +480,9 @@ export class AgentSDK {
         'Limit must be between 1 and 100',
       )
     }
+    if (filter.offset !== undefined) {
+      expectTrue(filter.offset >= 0, 'Offset must be non-negative')
+    }
     if (filter.owner !== undefined) {
       expect(isAddress(filter.owner), 'Owner must be a valid address')
     }
@@ -493,21 +493,21 @@ export class AgentSDK {
     // Build query based on filter
     const limit = filter.limit ?? 50
     const offset = filter.offset ?? 0
-    const ownerFilter = filter.owner ? `, where: { owner: { id_eq: "${filter.owner.toLowerCase()}" } }` : ''
+    const where: string[] = []
+    if (filter.owner) {
+      where.push(`owner: { id_eq: "${filter.owner.toLowerCase()}" }`)
+    }
+    if (filter.active === true) {
+      where.push('isBanned_eq: false')
+      where.push('isSlashed_eq: false')
+    }
+    const whereFilter =
+      where.length > 0 ? `, where: { ${where.join(', ')} }` : ''
 
     const query = `
       query SearchAgents {
-        registeredAgents(limit: ${limit}, offset: ${offset}${ownerFilter}, orderBy: registeredAt_DESC) {
-          id
+        registeredAgents(limit: ${limit}, offset: ${offset}${whereFilter}, orderBy: registeredAt_DESC) {
           agentId
-          owner { id }
-          tokenURI
-          name
-          description
-          tags
-          registeredAt
-          isBanned
-          isSlashed
         }
       }
     `
@@ -520,61 +520,71 @@ export class AgentSDK {
 
     expect(response.ok, `Search failed: ${response.statusText}`)
 
-    const rawResult = await response.json()
+    const raw: unknown = await response.json()
+    const result = z
+      .object({
+        data: z.object({
+          registeredAgents: z.array(z.object({ agentId: z.string() })),
+        }),
+        errors: z
+          .array(
+            z.object({
+              message: z.string(),
+            }),
+          )
+          .optional(),
+      })
+      .parse(raw)
 
-    // Handle GraphQL errors
-    if (rawResult.errors) {
-      this.log.error('GraphQL error', { errors: rawResult.errors })
-      throw new Error(`GraphQL error: ${rawResult.errors[0]?.message ?? 'Unknown error'}`)
+    if (result.errors && result.errors.length > 0) {
+      this.log.error('GraphQL error', { errors: result.errors })
+      throw new Error(`GraphQL error: ${result.errors[0].message}`)
     }
 
-    const agents = rawResult.data?.registeredAgents ?? []
-    const total = agents.length
+    const indexedAgents = result.data.registeredAgents
+    const total = indexedAgents.length
     this.log.debug('Search complete', { total })
 
-    // Convert indexed agents to AgentDefinition format
-    // Name, description, and tags are populated by the indexer from IPFS metadata
-    const items: AgentDefinition[] = agents.map((a: {
-      id: string
-      agentId: string
-      owner: { id: string }
-      tokenURI: string
-      name: string
-      description?: string
-      tags?: string[]
-      registeredAt: string
-      isBanned: boolean
-      isSlashed: boolean
-    }) => {
-      const { characterCid, stateCid } = this.parseTokenUriSafe(a.tokenURI)
+    const items: AgentDefinition[] = []
+    const resolvedAgents: Array<AgentDefinition | null> = new Array(
+      indexedAgents.length,
+    ).fill(null)
 
-      // Infer botType from tags (populated from character topics by indexer)
-      const tags = a.tags ?? []
-      const isTradingBot =
-        tags.includes('trading') ||
-        tags.includes('arbitrage') ||
-        tags.includes('mev')
-      const botType: 'ai_agent' | 'trading_bot' | 'org_tool' = isTradingBot
-        ? 'trading_bot'
-        : 'ai_agent'
+    // Fetch agents concurrently (bounded) to avoid slow sequential chain + IPFS reads
+    const concurrency = 5
+    let nextIndex = 0
+    const workers = Array.from({ length: concurrency }, async () => {
+      while (true) {
+        const i = nextIndex
+        nextIndex++
+        if (i >= indexedAgents.length) return
 
-      return {
-        id: a.id,
-        name: a.name || `Agent #${a.agentId}`,
-        agentId: BigInt(a.agentId),
-        owner: a.owner.id as `0x${string}`,
-        botType,
-        characterCid,
-        stateCid,
-        vaultAddress: ZERO_ADDRESS,
-        active: !a.isBanned && !a.isSlashed,
-        registeredAt: Number(a.registeredAt),
-        lastExecutedAt: 0,
-        executionCount: 0,
+        const indexed = indexedAgents[i]
+        const agentId = BigInt(indexed.agentId)
+        const agent = await this.getAgent(agentId)
+        const validAgent = expect(agent, `Agent not found: ${indexed.agentId}`)
+        resolvedAgents[i] = validAgent
       }
     })
 
-    return { items, total, hasMore: agents.length === limit }
+    await Promise.all(workers)
+
+    for (const agent of resolvedAgents) {
+      if (!agent) continue
+
+      if (filter.active !== undefined && agent.active !== filter.active) {
+        continue
+      }
+      if (filter.name) {
+        if (!agent.name.toLowerCase().includes(filter.name.toLowerCase())) {
+          continue
+        }
+      }
+
+      items.push(agent)
+    }
+
+    return { items, total, hasMore: indexedAgents.length === limit }
   }
 
   private parseTokenUri(uri: string): {
@@ -591,24 +601,6 @@ export class AgentSDK {
     expectTrue(characterCid.length > 0, 'Character CID cannot be empty')
     expectTrue(stateCid.length > 0, 'State CID cannot be empty')
     return { characterCid, stateCid }
-  }
-
-  /**
-   * Safe version of parseTokenUri that returns empty strings on failure
-   */
-  private parseTokenUriSafe(uri: string): {
-    characterCid: string
-    stateCid: string
-  } {
-    try {
-      if (!uri) return { characterCid: '', stateCid: '' }
-      const [base, fragment] = uri.split('#')
-      const characterCid = base?.replace('ipfs://', '') ?? ''
-      const stateCid = fragment?.replace('state=', '') ?? ''
-      return { characterCid, stateCid }
-    } catch {
-      return { characterCid: '', stateCid: '' }
-    }
   }
 }
 

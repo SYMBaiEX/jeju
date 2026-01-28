@@ -113,6 +113,29 @@ export interface PredictionMarket {
   outcome?: boolean
   createdAt: Date
   resolutionTime?: Date
+  /** TEE-backed oracle information */
+  tee?: {
+    /** Whether market uses TEE oracle */
+    enabled: boolean
+    /** Oracle provider address */
+    oracleAddress: string
+    /** TEE platform type */
+    platform?:
+      | 'intel_tdx'
+      | 'intel_sgx'
+      | 'amd_sev_snp'
+      | 'phala'
+      | 'aws_nitro'
+      | 'gcp_confidential'
+    /** Attestation status */
+    status: 'valid' | 'expired' | 'unverified' | 'pending'
+    /** mrEnclave measurement */
+    mrEnclave?: string
+    /** mrSigner measurement */
+    mrSigner?: string
+    /** When attestation expires */
+    expiresAt?: number
+  }
 }
 
 export interface PriceCandle {
@@ -566,13 +589,12 @@ export async function fetchPredictionMarkets(options: {
           resolved: boolean
           outcome: boolean | null
           createdAt: string
-          resolutionTime?: string
         }>
       }>(
         `
         query($limit: Int!, $offset: Int!) {
           predictionMarkets(${whereClause} limit: $limit offset: $offset orderBy: createdAt_DESC) {
-            id question yesShares noShares liquidityB totalVolume resolved outcome createdAt resolutionTime
+            id question yesShares noShares liquidityB totalVolume resolved outcome createdAt
           }
         }
       `,
@@ -595,9 +617,7 @@ export async function fetchPredictionMarkets(options: {
             resolved: m.resolved,
             outcome: m.outcome ?? undefined,
             createdAt: new Date(m.createdAt),
-            resolutionTime: m.resolutionTime
-              ? new Date(m.resolutionTime)
-              : undefined,
+            resolutionTime: undefined, // Field not in indexer schema
           }
         })
       }
@@ -717,7 +737,7 @@ export async function searchTokens(
     return tokenData.tokens.map(mapToken)
   } catch (error) {
     // Tokens query failed or no tokens found - return empty array
-    // Note: Contract entities don't have name/symbol fields, so we can't search them
+    // Contract entities don't have name/symbol fields, so we can't search them
     console.warn('[searchTokens] Token search failed:', error)
     return []
   }

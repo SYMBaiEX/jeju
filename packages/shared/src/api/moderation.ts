@@ -768,7 +768,9 @@ export class ModerationAPI {
       }),
     )
 
-    let filtered = cases.filter((c): c is ModerationCase => c !== null)
+    let filtered = cases.filter(
+      (c: ModerationCase | null): c is ModerationCase => c !== null,
+    )
     if (options?.activeOnly)
       filtered = filtered.filter((c: ModerationCase) => !c.resolved)
     if (options?.resolvedOnly)
@@ -859,7 +861,7 @@ export class ModerationAPI {
       }),
     )
 
-    let filtered = reports.filter((r): r is Report => r !== null)
+    let filtered = reports.filter((r: Report | null): r is Report => r !== null)
     if (options?.pendingOnly)
       filtered = filtered.filter((r: Report) => r.status === 'PENDING')
     return filtered

@@ -334,25 +334,36 @@ function showAuthorizationUI(redirectUri: string, _state: string | null): void {
             <span style="font-size: 1.25rem;">🔐</span>
             <span style="font-weight: 500;">Continue with Wallet</span>
           </button>
-          <button onclick="startAuth('google')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
-            <span style="font-size: 1.25rem;">🔵</span>
-            <span style="font-weight: 500;">Continue with Google</span>
-          </button>
-          <button onclick="startAuth('github')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
-            <span style="font-size: 1.25rem;">🐙</span>
-            <span style="font-weight: 500;">Continue with GitHub</span>
-          </button>
-          <button onclick="startAuth('discord')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
-            <span style="font-size: 1.25rem;">💬</span>
-            <span style="font-weight: 500;">Continue with Discord</span>
-          </button>
-          <button onclick="startAuth('twitter')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
-            <span style="font-size: 1.25rem;">🐦</span>
-            <span style="font-weight: 500;">Continue with Twitter</span>
+          <button onclick="startPasskey()" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
+            <span style="font-size: 1.25rem;">🔑</span>
+            <span style="font-weight: 500;">Continue with Passkey</span>
           </button>
           <button onclick="startAuth('farcaster')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
             <span style="font-size: 1.25rem;">🟣</span>
             <span style="font-weight: 500;">Continue with Farcaster</span>
+          </button>
+          
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0;">
+            <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+            <span style="color: var(--text-muted); font-size: 0.85rem;">or continue with</span>
+            <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+          </div>
+          
+          <button onclick="startAuth('google')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
+            <span style="font-size: 1.25rem;">🔵</span>
+            <span style="font-weight: 500;">Google</span>
+          </button>
+          <button onclick="startAuth('github')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
+            <span style="font-size: 1.25rem;">🐙</span>
+            <span style="font-weight: 500;">GitHub</span>
+          </button>
+          <button onclick="startAuth('discord')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
+            <span style="font-size: 1.25rem;">💬</span>
+            <span style="font-weight: 500;">Discord</span>
+          </button>
+          <button onclick="startAuth('twitter')" class="provider-btn" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); cursor: pointer; font-size: 1rem; transition: all 0.2s;">
+            <span style="font-size: 1.25rem;">🐦</span>
+            <span style="font-weight: 500;">Twitter</span>
           </button>
         </div>
         
@@ -407,13 +418,151 @@ function startAuth(provider: string): void {
   window.location.href = authUrl.toString()
 }
 
-// Expose startAuth to window for onclick handlers
+/**
+ * Start passkey authentication flow
+ */
+async function startPasskey(): Promise<void> {
+  const redirectUri = sessionStorage.getItem('oauth3_redirect_uri')
+  const state = sessionStorage.getItem('oauth3_state')
+
+  if (!redirectUri) {
+    console.error('[OAuth3] No redirect_uri in session')
+    return
+  }
+
+  try {
+    // Get passkey options from the server
+    const optionsRes = await fetch(`${window.location.origin}/auth/passkey/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: window.location.origin, appId: 'jeju-default' }),
+    })
+
+    if (!optionsRes.ok) {
+      throw new Error('Failed to get passkey options')
+    }
+
+    const options = await optionsRes.json()
+    const publicKey = options.publicKey
+
+    // Convert base64url strings to ArrayBuffers
+    publicKey.challenge = base64urlToBuffer(publicKey.challenge)
+    if (publicKey.user?.id) {
+      publicKey.user.id = base64urlToBuffer(publicKey.user.id)
+    }
+    if (publicKey.allowCredentials) {
+      publicKey.allowCredentials = publicKey.allowCredentials.map(
+        (cred: { id: string; type: string; transports?: string[] }) => ({
+          ...cred,
+          id: base64urlToBuffer(cred.id),
+        }),
+      )
+    }
+
+    // Call WebAuthn API
+    let credential: PublicKeyCredential | null
+    if (options.mode === 'registration') {
+      credential = (await navigator.credentials.create({
+        publicKey,
+      })) as PublicKeyCredential | null
+    } else {
+      credential = (await navigator.credentials.get({
+        publicKey,
+      })) as PublicKeyCredential | null
+    }
+
+    if (!credential) {
+      throw new Error('No credential returned')
+    }
+
+    // Prepare credential for verification
+    const response: Record<string, string> = {
+      clientDataJSON: bufferToBase64url(
+        new Uint8Array((credential.response as AuthenticatorAttestationResponse).clientDataJSON),
+      ),
+    }
+
+    if (options.mode === 'registration') {
+      response.attestationObject = bufferToBase64url(
+        new Uint8Array(
+          (credential.response as AuthenticatorAttestationResponse).attestationObject,
+        ),
+      )
+    } else {
+      const assertionResponse = credential.response as AuthenticatorAssertionResponse
+      response.authenticatorData = bufferToBase64url(
+        new Uint8Array(assertionResponse.authenticatorData),
+      )
+      response.signature = bufferToBase64url(new Uint8Array(assertionResponse.signature))
+      if (assertionResponse.userHandle) {
+        response.userHandle = bufferToBase64url(new Uint8Array(assertionResponse.userHandle))
+      }
+    }
+
+    // Verify with server
+    const verifyRes = await fetch(`${window.location.origin}/auth/passkey/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        appId: 'jeju-default',
+        mode: options.mode,
+        challengeId: options.challengeId,
+        credential: {
+          id: credential.id,
+          rawId: bufferToBase64url(new Uint8Array(credential.rawId)),
+          type: credential.type,
+          response,
+        },
+      }),
+    })
+
+    if (!verifyRes.ok) {
+      const err = await verifyRes.json()
+      throw new Error(err.error || 'Passkey verification failed')
+    }
+
+    const session = await verifyRes.json()
+
+    // Generate auth code and redirect
+    const code = session.sessionId
+    const redirectUrl = new URL(redirectUri)
+    redirectUrl.searchParams.set('code', code)
+    if (state) redirectUrl.searchParams.set('state', state)
+    window.location.href = redirectUrl.toString()
+  } catch (err) {
+    console.error('[OAuth3] Passkey auth failed:', err)
+    alert(`Passkey authentication failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+  }
+}
+
+function base64urlToBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const padLen = (4 - (base64.length % 4)) % 4
+  const padded = base64 + '='.repeat(padLen)
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
+function bufferToBase64url(buffer: Uint8Array): string {
+  return btoa(String.fromCharCode(...buffer))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+// Expose startAuth and startPasskey to window for onclick handlers
 declare global {
   interface Window {
     startAuth: (provider: string) => void
+    startPasskey: () => Promise<void>
   }
 }
 window.startAuth = startAuth
+window.startPasskey = startPasskey
 
 /**
  * Initialize application

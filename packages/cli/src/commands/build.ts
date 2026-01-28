@@ -487,14 +487,14 @@ function createIndexHtml(title: string, mainScript: string): string {
 
 buildCommand
   .command('images')
-  .description('Build Docker images for apps')
+  .description('Build Docker images for infrastructure (DWS storage)')
   .option('--network <network>', 'Network: testnet | mainnet', 'testnet')
-  .option('--push', 'Push images to ECR after building')
+  .option('--push', 'Push images to DWS Storage (IPFS)')
   .action(async (options: { network: string; push?: boolean }) => {
     const rootDir = findMonorepoRoot()
     const scriptPath = join(
       rootDir,
-      'packages/deployment/scripts/build-images.ts',
+      'packages/deployment/scripts/build-images-dws.ts',
     )
 
     if (!existsSync(scriptPath)) {
@@ -517,7 +517,7 @@ buildCommand
   .command('sqlit')
   .description('Build SQLit multi-arch Docker image')
   .option('--network <network>', 'Network: testnet | mainnet', 'testnet')
-  .option('--push', 'Push image to ECR after building')
+  .option('--push', 'Push image to DWS Storage')
   .option('--arm-only', 'Build ARM64 only')
   .option('--x86-only', 'Build x86_64 only')
   .action(

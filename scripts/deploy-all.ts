@@ -38,7 +38,6 @@ const APPS = [
   'vpn',
   'monitoring',
   'otto',
-  'example',
   'indexer',
 ]
 

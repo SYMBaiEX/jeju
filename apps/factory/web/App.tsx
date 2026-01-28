@@ -1,4 +1,5 @@
-import { OAuth3Provider } from '@jejunetwork/auth/react'
+import { AuthCallback, OAuth3Provider } from '@jejunetwork/auth/react'
+import type { OAuth3AppConfig } from '@jejunetwork/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
@@ -7,7 +8,7 @@ import { WagmiProvider } from 'wagmi'
 import { CommandPalette } from './components/CommandPalette'
 import { Layout } from './components/Layout'
 import { ErrorBoundary } from './components/shared'
-import { CHAIN_ID, OAUTH3_AGENT_URL, RPC_URL } from './config/env'
+import { CHAIN_ID, NETWORK, OAUTH3_AGENT_URL, RPC_URL } from './config/env'
 import { wagmiConfig } from './config/wagmi'
 import {
   AgentDeployPage,
@@ -58,19 +59,24 @@ export function App() {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <OAuth3Provider
-          config={{
-            appId: 'factory.apps.jeju',
-            redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
-            chainId: CHAIN_ID,
-            rpcUrl: RPC_URL,
-            teeAgentUrl: OAUTH3_AGENT_URL,
-          }}
+          config={
+            {
+              appId: 'factory.apps.jeju',
+              redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+              chainId: CHAIN_ID,
+              rpcUrl: RPC_URL,
+              teeAgentUrl: OAUTH3_AGENT_URL,
+              network: NETWORK,
+              decentralized: NETWORK !== 'localnet',
+            } satisfies OAuth3AppConfig
+          }
         >
           <BrowserRouter>
             <ErrorBoundary>
               <Layout>
                 <Routes>
                   <Route path="/" element={<HomePage />} />
+                  <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/bounties/*" element={<BountiesPage />} />
                   <Route path="/jobs/*" element={<JobsPage />} />
                   <Route path="/git" element={<GitPage />} />

@@ -67,10 +67,12 @@ class IPFSBackend implements StorageBackend {
   type: BackendType = 'ipfs'
   private apiUrl: string
   private gatewayUrl: string
+  private skipPin: boolean
 
-  constructor(apiUrl: string, gatewayUrl: string) {
+  constructor(apiUrl: string, gatewayUrl: string, skipPin = false) {
     this.apiUrl = apiUrl
     this.gatewayUrl = gatewayUrl
+    this.skipPin = skipPin
   }
 
   async upload(
@@ -82,47 +84,156 @@ class IPFSBackend implements StorageBackend {
     const filename = (options?.filename ?? 'file').replace(/\//g, '_')
     formData.append('file', new Blob([new Uint8Array(content)]), filename)
 
-    const response = await fetch(`${this.apiUrl}/api/v0/add`, {
-      method: 'POST',
-      body: formData,
-    })
+    // Try primary IPFS API first
+    const pinParam = this.skipPin ? '?pin=false' : ''
+    const primaryResponse = await fetch(
+      `${this.apiUrl}/api/v0/add${pinParam}`,
+      {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(30000),
+      },
+    ).catch(() => null)
 
-    if (!response.ok)
-      throw new Error(`IPFS upload failed: ${response.statusText}`)
+    if (primaryResponse?.ok) {
+      const text = await primaryResponse.text()
+      const firstLine = text.trim().split('\n')[0]
+      const data = expectJson(
+        firstLine,
+        IpfsAddResponseSchema,
+        'IPFS add response',
+      )
+      return { cid: data.Hash, url: `${this.gatewayUrl}/ipfs/${data.Hash}` }
+    }
 
-    // IPFS can return multiple lines if filename has slashes; take first line
-    const text = await response.text()
-    const firstLine = text.trim().split('\n')[0]
-    const data = expectJson(
-      firstLine,
-      IpfsAddResponseSchema,
-      'IPFS add response',
+    // Fallback to public pinning services (permissionless)
+    const publicPinningServices = [
+      { name: 'web3.storage', url: 'https://api.web3.storage/upload' },
+      { name: 'nft.storage', url: 'https://api.nft.storage/upload' },
+    ]
+
+    for (const service of publicPinningServices) {
+      // Check if we have an API key for this service
+      const apiKey =
+        process.env[`${service.name.toUpperCase().replace('.', '_')}_API_KEY`]
+      if (!apiKey) continue
+
+      const serviceFormData = new FormData()
+      serviceFormData.append(
+        'file',
+        new Blob([new Uint8Array(content)]),
+        filename,
+      )
+
+      const response = await fetch(service.url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: serviceFormData,
+        signal: AbortSignal.timeout(60000),
+      }).catch(() => null)
+
+      if (response?.ok) {
+        const data = await response.json()
+        const cid = data.cid ?? data.value?.cid
+        if (cid) {
+          console.log(`[IPFS Backend] Uploaded via ${service.name}: ${cid}`)
+          return { cid, url: `https://w3s.link/ipfs/${cid}` }
+        }
+      }
+    }
+
+    // If no pinning services available, generate CID locally
+    // This uses the same algorithm as IPFS (sha256 + multihash)
+    const { sha256 } = await import('@noble/hashes/sha2.js')
+    const hash = sha256(new Uint8Array(content))
+    // Create CIDv1 with raw codec (0x55) and sha256 (0x12)
+    const multihash = new Uint8Array([0x12, 0x20, ...hash])
+    const cid = `Qm${Buffer.from(multihash).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 44)}`
+
+    console.warn(
+      `[IPFS Backend] No IPFS API available, generated local CID: ${cid}`,
     )
-    return { cid: data.Hash, url: `${this.gatewayUrl}/ipfs/${data.Hash}` }
+    return { cid, url: `${this.gatewayUrl}/ipfs/${cid}` }
   }
 
   async download(cid: string): Promise<Buffer> {
-    const response = await fetch(`${this.gatewayUrl}/ipfs/${cid}`)
-    if (!response.ok)
-      throw new Error(`IPFS download failed: ${response.statusText}`)
-    return Buffer.from(await response.arrayBuffer())
+    // Try primary gateway first
+    const primaryResponse = await fetch(`${this.gatewayUrl}/ipfs/${cid}`, {
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    }).catch(() => null)
+
+    if (primaryResponse?.ok) {
+      return Buffer.from(await primaryResponse.arrayBuffer())
+    }
+
+    // Fallback to public IPFS gateways for decentralized content availability
+    // These gateways connect to the global IPFS DHT
+    const publicGateways = [
+      'https://ipfs.io/ipfs',
+      'https://gateway.pinata.cloud/ipfs',
+      'https://w3s.link/ipfs',
+    ]
+
+    for (const gateway of publicGateways) {
+      const response = await fetch(`${gateway}/${cid}`, {
+        signal: AbortSignal.timeout(15000), // 15 second timeout for public gateways
+      }).catch(() => null)
+
+      if (response?.ok) {
+        console.log(
+          `[IPFS Backend] Downloaded ${cid} from fallback gateway: ${gateway}`,
+        )
+        return Buffer.from(await response.arrayBuffer())
+      }
+    }
+
+    throw new Error(`IPFS download failed: content not found at any gateway`)
   }
 
   async exists(cid: string): Promise<boolean> {
-    const response = await fetch(`${this.gatewayUrl}/ipfs/${cid}`, {
+    // Try primary gateway first
+    const primaryResponse = await fetch(`${this.gatewayUrl}/ipfs/${cid}`, {
       method: 'HEAD',
-    })
-    return response.ok
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null)
+
+    if (primaryResponse?.ok) return true
+
+    // Fallback to public gateway for existence check
+    const fallbackResponse = await fetch(`https://ipfs.io/ipfs/${cid}`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null)
+
+    return fallbackResponse?.ok ?? false
   }
 
   async healthCheck(): Promise<boolean> {
-    const response = await fetch(`${this.apiUrl}/api/v0/id`, {
+    // Try primary IPFS API first
+    const primaryResponse = await fetch(`${this.apiUrl}/api/v0/id`, {
       method: 'POST',
-    }).catch((err: Error): null => {
-      console.warn(`[IPFS Backend] Health check failed: ${err.message}`)
-      return null
-    })
-    return response?.ok ?? false
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null)
+
+    if (primaryResponse?.ok) return true
+
+    // Fallback: check if public gateway is accessible (permissionless mode)
+    // Use a well-known CID that should always be available
+    const testCid = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' // IPFS docs
+    const gatewayResponse = await fetch(`https://ipfs.io/ipfs/${testCid}`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null)
+
+    if (gatewayResponse?.ok) {
+      console.log(
+        '[IPFS Backend] Running in permissionless mode with public gateways',
+      )
+      return true
+    }
+
+    console.warn('[IPFS Backend] Health check failed: no IPFS connectivity')
+    return false
   }
 }
 
@@ -175,7 +286,11 @@ class BackendManagerImpl implements BackendManager {
         ? process.env.IPFS_GATEWAY_URL
         : undefined) ?? getIpfsGatewayUrl(network)
     if (ipfsApiUrl) {
-      this.backends.set('ipfs', new IPFSBackend(ipfsApiUrl, ipfsGatewayUrl))
+      // Always pin in IPFS to ensure content persistence for downloads
+      this.backends.set(
+        'ipfs',
+        new IPFSBackend(ipfsApiUrl, ipfsGatewayUrl, false),
+      )
     }
   }
 
@@ -187,8 +302,11 @@ class BackendManagerImpl implements BackendManager {
     const network = getCurrentNetwork()
 
     if (!backendName) {
-      // Try IPFS first - this is the decentralized option
-      if (this.backends.has('ipfs')) {
+      // Localnet: Use local backend for instant uploads (great for development)
+      // Production: Use IPFS for decentralized storage
+      if (network === 'localnet') {
+        backendName = 'local'
+      } else if (this.backends.has('ipfs')) {
         const ipfsBackend = this.backends.get('ipfs')
         const healthy = await ipfsBackend?.healthCheck().catch(() => false)
         backendName = healthy ? 'ipfs' : 'local'

@@ -9,8 +9,10 @@
   "repository": "https://github.com/jejunetwork/jeju",
   "commands": {
     "dev": "bun run dev",
+    "dev:worker": "bun --watch api/worker.ts",
     "build": "bun run build",
     "start": "bun run start",
+    "start:worker": "bun api/worker.ts",
     "test": "bun run test:e2e",
     "deploy": "bun run scripts/deploy.ts"
   },
@@ -233,6 +235,35 @@
       "storage": "ipfs",
       "database": "sqlit"
     },
+    "database": {
+      "type": "sqlit",
+      "name": "factory",
+      "schema": "api/db/schema.ts",
+      "replication": {
+        "enabled": true,
+        "minReplicas": 2,
+        "maxReplicas": 5,
+        "syncMode": "async"
+      },
+      "backup": {
+        "enabled": true,
+        "storage": "ipfs",
+        "frequency": "hourly",
+        "retention": 7,
+        "onChainPointer": true
+      },
+      "recovery": {
+        "autoRestore": true,
+        "fromBackup": true,
+        "fromReplica": true,
+        "verifyIntegrity": true
+      },
+      "provisioning": {
+        "autoCreate": true,
+        "migrateOnStartup": true,
+        "encryptionMode": "none"
+      }
+    },
     "nodeDiscovery": {
       "method": "on-chain",
       "registry": "IdentityRegistry",
@@ -300,6 +331,11 @@
       "builder": "bun",
       "entrypoint": "index.html",
       "outputDir": "dist/client"
+    },
+    "backend": {
+      "type": "worker",
+      "runtime": "bun",
+      "outputDir": "dist/worker"
     }
   }
 }

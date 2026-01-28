@@ -784,13 +784,18 @@ export function createAppDeployerRouter() {
           const { registerDeployedApp } = await import(
             '../server/routes/app-router'
           )
+          const backendWorkerId = `${runtime}:${functionId}`
+          const backendEndpoint =
+            runtime === 'bun'
+              ? `http://127.0.0.1:4030/workers/${functionId}`
+              : null
           await registerDeployedApp({
             name,
             jnsName: `${name}.jeju`,
             frontendCid: null,
             staticFiles: null,
-            backendWorkerId: functionId,
-            backendEndpoint: `http://127.0.0.1:4030/workers/${functionId}/http`,
+            backendWorkerId,
+            backendEndpoint,
             apiPaths: routes,
             spa: false,
             enabled: true,

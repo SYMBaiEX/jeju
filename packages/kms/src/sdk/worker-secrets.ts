@@ -421,9 +421,6 @@ export async function registerSecret(
   params: RegisterSecretParams,
   _privateKey: Hex,
 ): Promise<RegisterSecretResult> {
-  // Sign the registration request
-  const _message = `register:${params.name}:${params.owner}:${Date.now()}`
-
   const response = await fetch(`${kmsEndpoint}/vault/secrets`, {
     method: 'POST',
     headers: {

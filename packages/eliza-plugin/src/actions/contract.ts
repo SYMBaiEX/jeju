@@ -10,7 +10,11 @@ import type {
   Memory,
   State,
 } from '@elizaos/core'
-import { fetchWithTimeout, isUrlSafeToFetch, truncateOutput } from '../validation'
+import {
+  fetchWithTimeout,
+  isUrlSafeToFetch,
+  truncateOutput,
+} from '../validation'
 
 // Domain allowlist for security
 const ALLOWED_DOMAINS = new Set([
@@ -29,7 +33,8 @@ function isAllowedDomain(urlString: string): boolean {
 
 export const fetchContractAction: Action = {
   name: 'FETCH_CONTRACT',
-  description: 'Fetch Solidity contract source code from a GitHub raw URL for security analysis',
+  description:
+    'Fetch Solidity contract source code from a GitHub raw URL for security analysis',
   similes: [
     'fetch contract',
     'get contract source',
@@ -52,7 +57,9 @@ export const fetchContractAction: Action = {
     // Extract URL
     const urlMatch = text.match(/https?:\/\/[^\s]+/)
     if (!urlMatch) {
-      callback?.({ text: 'Please provide a GitHub raw URL to a Solidity contract.' })
+      callback?.({
+        text: 'Please provide a GitHub raw URL to a Solidity contract.',
+      })
       return
     }
 
@@ -78,7 +85,9 @@ export const fetchContractAction: Action = {
     const response = await fetchWithTimeout(targetUrl, {}, 30000)
 
     if (!response.ok) {
-      callback?.({ text: `Failed to fetch: ${response.status} ${response.statusText}` })
+      callback?.({
+        text: `Failed to fetch: ${response.status} ${response.statusText}`,
+      })
       return
     }
 
@@ -108,8 +117,18 @@ export const fetchContractAction: Action = {
 
   examples: [
     [
-      { name: 'user', content: { text: 'Fetch contract from https://raw.githubusercontent.com/...' } },
-      { name: 'agent', content: { text: 'Contract source (1234 bytes):\n\n```solidity\n// SPDX-License-Identifier...' } },
+      {
+        name: 'user',
+        content: {
+          text: 'Fetch contract from https://raw.githubusercontent.com/...',
+        },
+      },
+      {
+        name: 'agent',
+        content: {
+          text: 'Contract source (1234 bytes):\n\n```solidity\n// SPDX-License-Identifier...',
+        },
+      },
     ],
   ],
 }

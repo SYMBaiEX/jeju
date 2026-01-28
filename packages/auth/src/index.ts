@@ -277,6 +277,7 @@ export {
 export {
   ConnectedAccount,
   type ConnectedAccountProps,
+  AuthCallback,
   type LinkedAccount,
   LoginButton,
   type LoginButtonProps,

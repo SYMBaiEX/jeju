@@ -1,137 +1,221 @@
-/**
- * Default Bot Configurations
- * Network-specific bot configurations and factory functions
- */
-
 import type { Address } from 'viem'
+import type { TradingBotChain, TradingBotStrategy } from '../../lib/types'
+import type { TradingBotOptions } from './trading-bot'
 
-export interface BotStrategy {
-  type: string
-  enabled: boolean
-  minProfitBps?: number
-  maxGasGwei?: number
-  maxSlippageBps?: number
-  cooldownMs?: number
-}
-
-export interface ChainConfig {
-  chainId: number
-  name: string
-  nativeSymbol: string
-  rpcUrl: string
-}
-
+/**
+ * Configuration for a default trading bot.
+ */
 export interface DefaultBotConfig {
   name: string
   description: string
-  strategies: BotStrategy[]
+  strategies: TradingBotStrategy[]
+  chains: number[]
   initialFunding: string
 }
 
-export interface TradingBotOptions {
-  agentId: bigint
-  name: string
-  strategies: BotStrategy[]
-  chains: ChainConfig[]
-  maxConcurrentExecutions: number
-  useFlashbots: boolean
-  treasuryAddress?: Address
+/**
+ * Default chain configurations for various networks.
+ */
+export const DEFAULT_CHAINS: Record<string, TradingBotChain> = {
+  mainnet: {
+    chainId: 1,
+    name: 'Ethereum',
+    rpcUrl: 'https://eth.llamarpc.com',
+    blockTime: 12000,
+    isL2: false,
+    nativeSymbol: 'ETH',
+  },
+  arbitrum: {
+    chainId: 42161,
+    name: 'Arbitrum',
+    rpcUrl: 'https://arb1.arbitrum.io/rpc',
+    blockTime: 250,
+    isL2: true,
+    nativeSymbol: 'ETH',
+  },
+  optimism: {
+    chainId: 10,
+    name: 'Optimism',
+    rpcUrl: 'https://mainnet.optimism.io',
+    blockTime: 2000,
+    isL2: true,
+    nativeSymbol: 'ETH',
+  },
+  base: {
+    chainId: 8453,
+    name: 'Base',
+    rpcUrl: 'https://mainnet.base.org',
+    blockTime: 2000,
+    isL2: true,
+    nativeSymbol: 'ETH',
+  },
+  bsc: {
+    chainId: 56,
+    name: 'BNB Chain',
+    rpcUrl: 'https://bsc-dataseed.binance.org',
+    blockTime: 3000,
+    isL2: false,
+    nativeSymbol: 'BNB',
+  },
+  jeju: {
+    chainId: 420691,
+    name: 'Jeju Network',
+    rpcUrl: 'https://rpc.jejunetwork.org',
+    blockTime: 2000,
+    isL2: true,
+    nativeSymbol: 'JEJU',
+  },
+  jejuTestnet: {
+    chainId: 420690,
+    name: 'Jeju Testnet',
+    rpcUrl: 'https://rpc.testnet.jejunetwork.org',
+    blockTime: 2000,
+    isL2: true,
+    nativeSymbol: 'JEJU',
+  },
 }
 
-const LOCALNET_BOTS: DefaultBotConfig[] = [
+/**
+ * Default bot configurations for various trading strategies.
+ */
+export const DEFAULT_BOTS: DefaultBotConfig[] = [
   {
-    name: 'Test Arbitrage Bot',
-    description: 'Local testing bot for DEX arbitrage',
+    name: 'DEX Arbitrage Bot',
+    description: 'Arbitrage opportunities across DEXes',
     strategies: [
       {
         type: 'DEX_ARBITRAGE',
         enabled: true,
-        minProfitBps: 10,
+        minProfitBps: 50,
         maxGasGwei: 100,
-        maxSlippageBps: 50,
-        cooldownMs: 5000,
+        maxSlippageBps: 100,
       },
     ],
+    chains: [1, 42161, 10, 8453, 56, 420691],
     initialFunding: '1.0',
   },
-]
-
-const TESTNET_BOTS: DefaultBotConfig[] = [
   {
-    name: 'Testnet Arbitrage Bot',
-    description: 'Testnet bot for DEX arbitrage testing',
+    name: 'Sandwich Bot',
+    description: 'MEV sandwich attacks',
     strategies: [
       {
-        type: 'DEX_ARBITRAGE',
+        type: 'SANDWICH',
         enabled: true,
-        minProfitBps: 20,
-        maxGasGwei: 50,
-        maxSlippageBps: 100,
-        cooldownMs: 30000,
+        minProfitBps: 100,
+        maxGasGwei: 200,
+        maxSlippageBps: 50,
       },
     ],
+    chains: [1, 42161, 10, 8453],
+    initialFunding: '2.0',
+  },
+  {
+    name: 'Cross-Chain Arbitrage Bot',
+    description: 'Arbitrage across different chains',
+    strategies: [
+      {
+        type: 'CROSS_CHAIN_ARBITRAGE',
+        enabled: true,
+        minProfitBps: 200,
+        maxGasGwei: 150,
+        maxSlippageBps: 150,
+      },
+    ],
+    chains: [1, 42161, 10, 8453, 56],
+    initialFunding: '5.0',
+  },
+  {
+    name: 'Liquidation Bot',
+    description: 'Liquidation opportunities',
+    strategies: [
+      {
+        type: 'LIQUIDATION',
+        enabled: true,
+        minProfitBps: 300,
+        maxGasGwei: 300,
+        maxSlippageBps: 200,
+      },
+    ],
+    chains: [420691, 420690],
+    initialFunding: '10.0',
+  },
+  {
+    name: 'Oracle Keeper Bot',
+    description: 'Oracle price updates',
+    strategies: [
+      {
+        type: 'ORACLE_KEEPER',
+        enabled: true,
+        minProfitBps: 0,
+        maxGasGwei: 50,
+        maxSlippageBps: 0,
+      },
+    ],
+    chains: [1, 42161, 10, 8453, 420691],
     initialFunding: '0.5',
+  },
+  {
+    name: 'Solver Bot',
+    description: 'Batch auction solving',
+    strategies: [
+      {
+        type: 'SOLVER',
+        enabled: true,
+        minProfitBps: 25,
+        maxGasGwei: 100,
+        maxSlippageBps: 50,
+      },
+    ],
+    chains: [1, 42161, 10, 8453],
+    initialFunding: '3.0',
   },
 ]
 
-const MAINNET_BOTS: DefaultBotConfig[] = []
-
-// Combined default bots for iteration/testing
-export const DEFAULT_BOTS: DefaultBotConfig[] = [...LOCALNET_BOTS, ...TESTNET_BOTS]
-
-// Chain configurations by network
-export const DEFAULT_CHAINS: Record<string, { chainId: number; name: string; rpcUrl: string; blockTime: number }> = {
-  localnet: { chainId: 31337, name: 'Localnet', rpcUrl: 'http://127.0.0.1:6546', blockTime: 1 },
-  testnet: { chainId: 420690, name: 'Jeju Testnet', rpcUrl: 'https://testnet-rpc.jejunetwork.org', blockTime: 2 },
-  mainnet: { chainId: 420691, name: 'Jeju Mainnet', rpcUrl: 'https://rpc.jejunetwork.org', blockTime: 2 },
-}
-
-export function getDefaultBotsForNetwork(network: string): DefaultBotConfig[] {
-  switch (network) {
-    case 'localnet':
-      return LOCALNET_BOTS
-    case 'testnet':
-      return TESTNET_BOTS
-    case 'mainnet':
-      return MAINNET_BOTS
-    default:
-      return []
+/**
+ * Get default bots filtered and configured for a specific network.
+ */
+export function getDefaultBotsForNetwork(
+  network: 'localnet' | 'testnet' | 'mainnet',
+): DefaultBotConfig[] {
+  if (network === 'localnet') {
+    return DEFAULT_BOTS.map((bot) => ({
+      ...bot,
+      chains: [31337],
+      initialFunding: '0.01',
+    }))
   }
+
+  if (network === 'testnet') {
+    const testnetChains = [420690, 11155111, 84532, 421614]
+    return DEFAULT_BOTS.map((bot) => ({
+      ...bot,
+      chains: bot.chains.filter((chainId) => testnetChains.includes(chainId)),
+      initialFunding: String(
+        Math.max(0.01, parseFloat(bot.initialFunding) * 0.1),
+      ),
+    }))
+  }
+
+  return DEFAULT_BOTS
 }
 
+/**
+ * Create trading bot options from a default bot configuration.
+ */
 export function createTradingBotOptions(
   config: DefaultBotConfig,
   agentId: bigint,
-  network: string,
+  network: 'localnet' | 'testnet' | 'mainnet',
   treasuryAddress?: Address,
 ): TradingBotOptions {
-  const chains: ChainConfig[] = []
-
-  switch (network) {
-    case 'localnet':
-      chains.push({
-        chainId: 31337,
-        name: 'Localnet',
-        nativeSymbol: 'ETH',
-        rpcUrl: 'http://127.0.0.1:6546',
-      })
-      break
-    case 'testnet':
-      chains.push({
-        chainId: 420690,
-        name: 'Jeju Testnet',
-        nativeSymbol: 'ETH',
-        rpcUrl: 'https://testnet-rpc.jejunetwork.org',
-      })
-      break
-    case 'mainnet':
-      chains.push({
-        chainId: 420691,
-        name: 'Jeju Mainnet',
-        nativeSymbol: 'ETH',
-        rpcUrl: 'https://rpc.jejunetwork.org',
-      })
-      break
+  const chains: TradingBotChain[] = []
+  for (const chainId of config.chains) {
+    const chainConfig = Object.values(DEFAULT_CHAINS).find(
+      (c) => c.chainId === chainId,
+    )
+    if (chainConfig) {
+      chains.push(chainConfig)
+    }
   }
 
   return {
@@ -140,7 +224,8 @@ export function createTradingBotOptions(
     strategies: config.strategies,
     chains,
     maxConcurrentExecutions: 5,
-    useFlashbots: network === 'mainnet',
+    // Enable Flashbots in non-local environments
+    useFlashbots: network !== 'localnet',
     treasuryAddress,
   }
 }

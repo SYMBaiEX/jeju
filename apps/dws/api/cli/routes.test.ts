@@ -35,6 +35,8 @@ const TEST_ADDRESS_2 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address
 const _account = privateKeyToAccount(TEST_PRIVATE_KEY)
 const _account2 = privateKeyToAccount(TEST_PRIVATE_KEY_2)
 
+const CLI_BASE = '/cli'
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -56,7 +58,7 @@ async function loginUser(address: Address, privateKey: Hex): Promise<string> {
   const signature = await signLoginMessage(privateKey, message)
 
   const response = await app.handle(
-    new Request('http://localhost/auth/wallet', {
+    new Request(`http://localhost${CLI_BASE}/auth/wallet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -94,7 +96,7 @@ async function request(
   }
 
   const response = await app.handle(
-    new Request(`http://localhost${path}`, {
+    new Request(`http://localhost${CLI_BASE}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -254,7 +256,7 @@ describe('Authentication Routes', () => {
 
     test('returns valid: false with invalid token', async () => {
       const response = await app.handle(
-        new Request('http://localhost/auth/verify', {
+        new Request(`http://localhost${CLI_BASE}/auth/verify`, {
           headers: { Authorization: 'Bearer invalid-token-12345' },
         }),
       )
@@ -265,7 +267,7 @@ describe('Authentication Routes', () => {
 
     test('returns session info with valid token', async () => {
       const response = await app.handle(
-        new Request('http://localhost/auth/verify', {
+        new Request(`http://localhost${CLI_BASE}/auth/verify`, {
           headers: authHeaders(authToken),
         }),
       )
@@ -292,7 +294,7 @@ describe('Authentication Routes', () => {
 
       // Verify it works
       const verifyBefore = await app.handle(
-        new Request('http://localhost/auth/verify', {
+        new Request(`http://localhost${CLI_BASE}/auth/verify`, {
           headers: authHeaders(tempToken),
         }),
       )
@@ -300,7 +302,7 @@ describe('Authentication Routes', () => {
 
       // Logout
       await app.handle(
-        new Request('http://localhost/auth/logout', {
+        new Request(`http://localhost${CLI_BASE}/auth/logout`, {
           method: 'POST',
           headers: authHeaders(tempToken),
         }),
@@ -308,7 +310,7 @@ describe('Authentication Routes', () => {
 
       // Verify it no longer works
       const verifyAfter = await app.handle(
-        new Request('http://localhost/auth/verify', {
+        new Request(`http://localhost${CLI_BASE}/auth/verify`, {
           headers: authHeaders(tempToken),
         }),
       )
@@ -1487,7 +1489,7 @@ describe('Log Routes', () => {
   describe('GET /logs/stream', () => {
     test('requires authentication', async () => {
       const response = await app.handle(
-        new Request('http://localhost/logs/stream'),
+        new Request(`http://localhost${CLI_BASE}/logs/stream`),
       )
       // Should return error or reject
       expect(response.status >= 200).toBe(true)
@@ -1495,7 +1497,7 @@ describe('Log Routes', () => {
 
     test('returns SSE stream with auth', async () => {
       const response = await app.handle(
-        new Request('http://localhost/logs/stream', {
+        new Request(`http://localhost${CLI_BASE}/logs/stream`, {
           headers: authHeaders(authToken),
         }),
       )
@@ -1599,7 +1601,7 @@ describe('Route Not Found', () => {
 describe('Malformed Input Handling', () => {
   test('handles malformed JSON', async () => {
     const response = await app.handle(
-      new Request('http://localhost/auth/wallet', {
+      new Request(`http://localhost${CLI_BASE}/auth/wallet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{not: valid json',

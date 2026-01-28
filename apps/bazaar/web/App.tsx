@@ -5,6 +5,7 @@
  */
 
 import { OAuth3Provider } from '@jejunetwork/auth/react'
+import type { OAuth3AppConfig } from '@jejunetwork/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
@@ -13,6 +14,7 @@ import { WagmiProvider } from 'wagmi'
 import { BanCheckWrapper } from './components/BanCheckWrapper'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Header } from './components/Header'
+import { NETWORK, OAUTH3_AGENT_URL } from './config'
 import { chainId, rpcUrl, wagmiConfig } from './config/wagmi'
 import AuthCallbackPage from './pages/AuthCallback'
 import CoinCreatePage from './pages/CoinCreate'
@@ -65,12 +67,17 @@ function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <OAuth3Provider
-          config={{
-            appId: 'bazaar.apps.jeju',
-            redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
-            chainId,
-            rpcUrl,
-          }}
+          config={
+            {
+              appId: 'bazaar.apps.jeju',
+              redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+              chainId,
+              rpcUrl,
+              teeAgentUrl: OAUTH3_AGENT_URL,
+              network: NETWORK,
+              decentralized: NETWORK !== 'localnet',
+            } satisfies OAuth3AppConfig
+          }
         >
           {children}
         </OAuth3Provider>

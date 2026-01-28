@@ -23,12 +23,7 @@ import {
   createLocalDeployOrchestrator,
   type LocalDeployOrchestrator,
 } from '../services/local-deploy-orchestrator'
-import {
-  type AppManifest,
-  DEFAULT_PORTS,
-  DOMAIN_CONFIG,
-  WELL_KNOWN_KEYS,
-} from '../types'
+import { type AppManifest, DOMAIN_CONFIG, WELL_KNOWN_KEYS } from '../types'
 
 interface RunningService {
   name: string
@@ -151,7 +146,7 @@ async function deployAppsProduction(
         try {
           await execa('bun', ['run', 'build'], {
             cwd: dir,
-            stdio: 'pipe',
+            stdio: 'inherit',
           })
           logger.debug(`  Built ${app.name}`)
         } catch {
@@ -201,10 +196,15 @@ async function deployAppsProduction(
         JNS_REGISTRY_ADDRESS: dwsContracts.jnsRegistry,
         JNS_RESOLVER_ADDRESS: dwsContracts.jnsResolver,
         FARCASTER_HUB_URL: getFarcasterHubUrl(),
+        // SQLit config for DWS workers (inherits to all workers via SAFE_ENV_KEYS)
+        SQLIT_ENDPOINT: getSQLitBlockProducerUrl(),
+        SQLIT_NODES: getSQLitBlockProducerUrl(),
+        SQLIT_URL: getSQLitBlockProducerUrl(),
+        SQLIT_DATABASE_ID: process.env.SQLIT_DATABASE_ID ?? 'dws-localnet',
         // SQLit private key for local development
         SQLIT_PRIVATE_KEY: WELL_KNOWN_KEYS.dev[0].privateKey,
       },
-      stdio: 'pipe',
+      stdio: 'inherit',
     })
 
     runningServices.push({
@@ -228,7 +228,7 @@ async function deployAppsProduction(
         NODE_ENV: 'production',
         RPC_URL: rpcUrl,
       },
-      stdio: 'pipe',
+      stdio: 'inherit',
     })
 
     runningServices.push({
@@ -254,60 +254,9 @@ async function deployAppsProduction(
   // Deploy all apps (uploads to IPFS and registers in JNS)
   await localDeployOrchestrator.deployAllApps(appsWithDirs)
 
-  // Start backend workers in production mode
-  logger.step('Starting production backend workers...')
-  const vendorAppsWithBackend = appsWithDirs.filter(
-    ({ manifest }) =>
-      manifest.type === 'vendor' && manifest.architecture?.backend,
-  )
-
-  for (const { dir, manifest } of vendorAppsWithBackend) {
-    const commands = manifest.commands as Record<string, string> | undefined
-    const startCmd = commands?.['start:worker'] || commands?.start
-
-    if (!startCmd) continue
-
-    const apiPort = manifest.ports?.api ?? manifest.ports?.main ?? 5009
-
-    // Get database ID from manifest defaultEnv or use app name
-    const defaultEnv = (manifest.defaultEnv ?? {}) as Record<string, string>
-    const sqLitDatabaseId = defaultEnv.SQLIT_DATABASE_ID ?? manifest.name
-
-    // Get inference URL for LLM calls
-    const inferenceUrl = `http://${getLocalhostHost()}:${DEFAULT_PORTS.inference}`
-
-    const workerProc = execa('bun', ['run', startCmd.replace('bun run ', '')], {
-      cwd: dir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'production',
-        PORT: String(apiPort),
-        JEJU_RPC_URL: rpcUrl,
-        JEJU_DWS_ENDPOINT: `http://${getLocalhostHost()}:4030`,
-        JEJU_NETWORK: 'localnet',
-        SQLIT_BLOCK_PRODUCER_ENDPOINT: getSQLitBlockProducerUrl(),
-        SQLIT_DATABASE_ID: sqLitDatabaseId,
-        // Inference URL for LLM calls via Jeju Compute
-        JEJU_GATEWAY_URL: inferenceUrl,
-        JEJU_COMPUTE_ENDPOINT: inferenceUrl,
-        JEJU_INFERENCE_URL: inferenceUrl,
-        WORKER_REGISTRY_ADDRESS: dwsContracts.workerRegistry,
-        STORAGE_MANAGER_ADDRESS: dwsContracts.storageManager,
-        CDN_REGISTRY_ADDRESS: dwsContracts.cdnRegistry,
-        JNS_REGISTRY_ADDRESS: dwsContracts.jnsRegistry,
-        JNS_RESOLVER_ADDRESS: dwsContracts.jnsResolver,
-      },
-      stdio: 'pipe',
-    })
-
-    runningServices.push({
-      name: `${manifest.displayName || manifest.name} API`,
-      port: apiPort,
-      process: workerProc,
-    })
-
-    logger.success(`  ${manifest.name} backend started on port ${apiPort}`)
-  }
+  // IMPORTANT: Production mode does NOT start app backends as local processes.
+  // Backends are invoked through DWS workers via the `dws.worker` JNS record.
+  logger.step('Backends will be invoked via DWS workers...')
 
   // Start JNS Gateway in production mode
   logger.step('Starting JNS Gateway...')
@@ -317,7 +266,8 @@ async function deployAppsProduction(
     dwsContracts.jnsRegistry,
     4303,
     4180,
-    rootDir, // For local dev, still use local builds
+    rootDir,
+    { preferLocalFrontends: false, preferLocalBackends: false },
   )
 
   logger.success('Production deployment complete')
@@ -375,7 +325,7 @@ function setupSignalHandlers(): void {
     }
 
     await execa('docker', ['compose', 'down'], {
-      cwd: join(findMonorepoRoot(), 'apps/monitoring'),
+      cwd: join(findMonorepoRoot(), 'packages/monitoring'),
       reject: false,
     }).catch(() => undefined)
 

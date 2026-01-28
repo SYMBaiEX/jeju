@@ -116,7 +116,6 @@ export async function checkDWSCompute(): Promise<boolean> {
     if (!healthRes.ok) return false
 
     // Then verify inference capability with a minimal test request
-    // Note: endpoint already includes /compute, so just add /chat/completions
     const testRes = await fetch(`${endpoint}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,7 +142,6 @@ export async function dwsGenerate(
 ): Promise<string> {
   const endpoint = getDWSEndpoint()
   // Use OpenAI-compatible endpoint via DWS compute router
-  // Note: endpoint already includes /compute, so just add /chat/completions
   const r = await fetch(`${endpoint}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -388,7 +386,9 @@ export class AutocratAgentRuntimeManager {
     // - DeFi (swap, add liquidity)
     // - Identity (register agent)
     // - Cross-chain, Launchpad, Moderation, Work, Training
-    const plugins: Plugin[] = [jejuPlugin, specializedPlugin]
+    // Type assertion needed due to elizaos version misalignment in monorepo deps
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const plugins: Plugin[] = [jejuPlugin, specializedPlugin] as any as Plugin[]
 
     // Create runtime - ElizaOS generates agentId from character.name via stringToUuid
     // This ensures the agentId is always a valid UUID format

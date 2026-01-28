@@ -34,6 +34,7 @@ import { forkCommand } from './commands/fork'
 import { fundCommand } from './commands/fund'
 import { infraCommand } from './commands/infra'
 import { initCommand } from './commands/init'
+import { jnsCommand } from './commands/jns'
 import { keysCommand } from './commands/keys'
 import { localnetFullCommand } from './commands/localnet-full'
 import { loginCommand, logoutCommand, whoamiCommand } from './commands/login'
@@ -132,6 +133,7 @@ program.addCommand(secretCommand)
 
 // Domain management (JNS)
 program.addCommand(domainCommand)
+program.addCommand(jnsCommand)
 
 // Keys and accounts
 program.addCommand(keysCommand)
@@ -534,11 +536,6 @@ program.action(() => {
     '  ' +
       chalk.cyan(`${cliName} infra validate`) +
       '       Validate configurations',
-  )
-  console.log(
-    '  ' +
-      chalk.cyan(`${cliName} infra terraform`) +
-      '      Terraform operations',
   )
   console.log(
     '  ' +

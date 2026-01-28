@@ -100,6 +100,20 @@ export async function checkRpcHealth(
   }
 }
 
+export async function getRpcChainId(
+  rpcUrl: string,
+  timeout = 5000,
+): Promise<number | null> {
+  try {
+    const client = createPublicClient({
+      transport: http(rpcUrl, { timeout }),
+    })
+    return await client.getChainId()
+  } catch {
+    return null
+  }
+}
+
 export async function getAccountBalance(
   rpcUrl: string,
   address: `0x${string}`,
@@ -114,6 +128,54 @@ export async function getAccountBalance(
 export async function startLocalnet(
   rootDir: string,
 ): Promise<{ l1Port: number; l2Port: number }> {
+  // If localnet is already running and reachable, don't try to recreate it.
+  // This avoids hard-failing on Kurtosis/Docker client issues during E2E,
+  // and preserves existing port forwarding config.
+  const existingPorts = loadPortsConfig(rootDir)
+  const allowedChainIds = new Set([CHAIN_CONFIG.localnet.chainId, 1337])
+  if (existingPorts) {
+    const existingL2RpcUrl = `http://127.0.0.1:${existingPorts.l2Port}`
+    const healthy = await checkRpcHealth(existingL2RpcUrl, 2000)
+    const expectedChainId = CHAIN_CONFIG.localnet.chainId
+    const chainId = await getRpcChainId(existingL2RpcUrl, 2000)
+    if (healthy && chainId !== null && allowedChainIds.has(chainId)) {
+      logger.success(
+        `Localnet already running (L1: ${existingPorts.l1Port}, L2: ${existingPorts.l2Port})`,
+      )
+      return existingPorts
+    }
+    if (healthy && chainId !== null && !allowedChainIds.has(chainId)) {
+      logger.warn(
+        `Localnet chain ID mismatch (expected ${expectedChainId} or 1337, got ${chainId}) - restarting`,
+      )
+      await stopLocalnet()
+    }
+  }
+
+  // Fallback: localnet may already be running without a ports.json file.
+  // If the default L2 RPC is reachable, proceed without Kurtosis.
+  const defaultL2RpcUrl = CHAIN_CONFIG.localnet.rpcUrl
+  const defaultHealthy = await checkRpcHealth(defaultL2RpcUrl, 2000)
+  const defaultChainId = await getRpcChainId(defaultL2RpcUrl, 2000)
+  if (
+    defaultHealthy &&
+    defaultChainId !== null &&
+    allowedChainIds.has(defaultChainId)
+  ) {
+    logger.success(`Localnet already running (L2: ${defaultL2RpcUrl})`)
+    return { l1Port: DEFAULT_PORTS.l1Rpc, l2Port: DEFAULT_PORTS.l2Rpc }
+  }
+  if (
+    defaultHealthy &&
+    defaultChainId !== null &&
+    !allowedChainIds.has(defaultChainId)
+  ) {
+    logger.warn(
+      `Localnet chain ID mismatch (expected ${CHAIN_CONFIG.localnet.chainId} or 1337, got ${defaultChainId}) - restarting`,
+    )
+    await stopLocalnet()
+  }
+
   // Check Docker
   logger.step('Checking Docker...')
   const dockerResult = await checkDocker()
@@ -178,31 +240,42 @@ export async function startLocalnet(
 
   // Deploy localnet
   logger.step('Deploying network stack...')
-  await execa('kurtosis', ['run', kurtosisPackage, '--enclave', ENCLAVE_NAME], {
-    stdio: 'inherit',
-  })
+  const runResult = await execa(
+    'kurtosis',
+    ['run', kurtosisPackage, '--enclave', ENCLAVE_NAME],
+    { stdio: 'inherit', reject: false },
+  )
+  if (runResult.exitCode !== 0) {
+    logger.warn(
+      `Kurtosis run exited with code ${runResult.exitCode}. Verifying enclave state before failing...`,
+    )
+  }
 
   // Get ports
   logger.step('Getting port assignments...')
-  const l1PortResult = await execa('kurtosis', [
-    'port',
-    'print',
-    ENCLAVE_NAME,
-    'geth-l1',
-    'rpc',
-  ])
-  const l2PortResult = await execa('kurtosis', [
-    'port',
-    'print',
-    ENCLAVE_NAME,
-    'op-geth',
-    'rpc',
-  ])
+  const l1PortResult = await execa(
+    'kurtosis',
+    ['port', 'print', ENCLAVE_NAME, 'geth-l1', 'rpc'],
+    { reject: false },
+  )
+  const l2PortResult = await execa(
+    'kurtosis',
+    ['port', 'print', ENCLAVE_NAME, 'op-geth', 'rpc'],
+    { reject: false },
+  )
   const sqlitPortResult = await execa(
     'kurtosis',
     ['port', 'print', ENCLAVE_NAME, 'sqlit', 'api'],
     { reject: false },
   )
+
+  if (l1PortResult.exitCode !== 0 || l2PortResult.exitCode !== 0) {
+    throw new Error(
+      `Failed to resolve Kurtosis ports (L1 exit=${l1PortResult.exitCode}, L2 exit=${l2PortResult.exitCode}). ` +
+        `L1 stderr: ${l1PortResult.stderr?.trim() || 'n/a'} | ` +
+        `L2 stderr: ${l2PortResult.stderr?.trim() || 'n/a'}`,
+    )
+  }
 
   const l1PortStr = l1PortResult.stdout.trim().split(':').pop()
   const l2PortStr = l2PortResult.stdout.trim().split(':').pop()
@@ -293,8 +366,10 @@ async function setupPortForwarding(
     {
       detached: true,
       stdio: 'ignore',
+      reject: false,
     },
   )
+  subprocess.catch(() => {})
   subprocess.unref()
 
   logger.debug(`Port forwarding: ${staticPort} -> ${dynamicPort} (${name})`)
@@ -550,7 +625,7 @@ export async function bootstrapContracts(
       JEJU_RPC_URL: rpcUrl,
       L2_RPC_URL: rpcUrl,
     },
-    stdio: 'pipe',
+    stdio: 'inherit',
   })
 
   // Verify deployment ON-CHAIN

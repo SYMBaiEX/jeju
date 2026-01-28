@@ -15,6 +15,7 @@ import { getBlockByIdentifier } from './utils/block-detail-utils'
 import { getBlocks } from './utils/block-query-utils'
 import { mapContainerListResponse } from './utils/container-utils'
 import { getIndexerMode, isSchemaReady } from './utils/db'
+import { fetchAgentMetadata } from './utils/ipfs-metadata'
 import {
   mapAgentSummary,
   mapBlockDetail,
@@ -58,7 +59,6 @@ import {
   RATE_LIMITS,
   stakeRateLimiter,
 } from './utils/stake-rate-limiter'
-import { fetchAgentMetadata } from './utils/ipfs-metadata'
 import {
   getMarketplaceStats,
   getNetworkStats,
@@ -71,8 +71,11 @@ import {
 import { NotFoundError } from './utils/types'
 
 // Localnet detection - use GraphQL proxy for agents endpoint when in localnet
-const isLocalnet = config.chainId === 31337 || process.env.JEJU_NETWORK === 'localnet'
-console.log(`[REST] Localnet detection: chainId=${config.chainId}, JEJU_NETWORK=${process.env.JEJU_NETWORK}, isLocalnet=${isLocalnet}`)
+const isLocalnet =
+  config.chainId === 31337 || process.env.JEJU_NETWORK === 'localnet'
+console.log(
+  `[REST] Localnet detection: chainId=${config.chainId}, JEJU_NETWORK=${process.env.JEJU_NETWORK}, isLocalnet=${isLocalnet}`,
+)
 
 interface GraphQLAgent {
   id: string
@@ -113,7 +116,8 @@ async function fetchAgentsFromGraphQL(params: {
   const graphqlUrl = `http://127.0.0.1:${graphqlPort}/graphql`
 
   // Build where clause for filtering
-  const whereClause = params.active !== undefined ? `where: { active_eq: ${params.active} }` : ''
+  const whereClause =
+    params.active !== undefined ? `where: { active_eq: ${params.active} }` : ''
 
   const query = `
     query GetAgents($limit: Int, $offset: Int) {
@@ -175,36 +179,39 @@ async function fetchAgentsFromGraphQL(params: {
     }
 
     // Map GraphQL response to RegisteredAgent format
-    const agents: RegisteredAgent[] = result.data.registeredAgents.map((agent) => ({
-      id: agent.id,
-      agentId: parseInt(agent.agentId, 10),
-      ownerAddress: agent.owner?.id ?? null,
-      name: agent.name ?? null,
-      description: agent.description ?? null,
-      endpoint: null, // Not in GraphQL schema, derived from other endpoints
-      a2aEndpoint: agent.a2aEndpoint ?? null,
-      mcpEndpoint: agent.mcpEndpoint ?? null,
-      metadataUri: agent.tokenURI ?? null,
-      metadata: null, // Raw metadata not exposed in GraphQL
-      tags: agent.tags ?? null,
-      mcpTools: agent.mcpTools ?? null,
-      a2aSkills: agent.a2aSkills ?? null,
-      category: agent.category ?? null,
-      serviceType: agent.serviceType ?? null,
-      active: agent.active,
-      stakeAmount: agent.stakeAmount,
-      stakeTier: agent.stakeTier,
-      x402Support: agent.x402Support,
-      reputationScore: 0, // Not in GraphQL schema
-      totalReports: 0, // Not in GraphQL schema
-      successfulReports: 0, // Not in GraphQL schema
-      lastUpdatedBlock: null, // Not in GraphQL schema
-      registeredAt: agent.registeredAt,
-      isBanned: agent.isBanned,
-      banReason: null, // Not directly in GraphQL agent entity
-    }))
+    const agents: RegisteredAgent[] = result.data.registeredAgents.map(
+      (agent) => ({
+        id: agent.id,
+        agentId: parseInt(agent.agentId, 10),
+        ownerAddress: agent.owner?.id ?? null,
+        name: agent.name ?? null,
+        description: agent.description ?? null,
+        endpoint: null, // Not in GraphQL schema, derived from other endpoints
+        a2aEndpoint: agent.a2aEndpoint ?? null,
+        mcpEndpoint: agent.mcpEndpoint ?? null,
+        metadataUri: agent.tokenURI ?? null,
+        metadata: null, // Raw metadata not exposed in GraphQL
+        tags: agent.tags ?? null,
+        mcpTools: agent.mcpTools ?? null,
+        a2aSkills: agent.a2aSkills ?? null,
+        category: agent.category ?? null,
+        serviceType: agent.serviceType ?? null,
+        active: agent.active,
+        stakeAmount: agent.stakeAmount,
+        stakeTier: agent.stakeTier,
+        x402Support: agent.x402Support,
+        reputationScore: 0, // Not in GraphQL schema
+        totalReports: 0, // Not in GraphQL schema
+        successfulReports: 0, // Not in GraphQL schema
+        lastUpdatedBlock: null, // Not in GraphQL schema
+        registeredAt: agent.registeredAt,
+        isBanned: agent.isBanned,
+        banReason: null, // Not directly in GraphQL agent entity
+      }),
+    )
 
-    const total = result.data.registeredAgentsConnection?.totalCount ?? agents.length
+    const total =
+      result.data.registeredAgentsConnection?.totalCount ?? agents.length
 
     return { agents, total }
   } catch (err) {
@@ -261,11 +268,19 @@ const DEFAULT_CORS_ORIGINS = [
   'https://jejunetwork.org',
 ]
 
+// In development, allow localhost origins
+const isDevMode = process.env.NODE_ENV !== 'production'
+const devOrigins = isDevMode
+  ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
+  : []
+
 const effectiveCorsOrigins =
-  CORS_ORIGINS.length > 0 ? CORS_ORIGINS : DEFAULT_CORS_ORIGINS
+  CORS_ORIGINS.length > 0
+    ? CORS_ORIGINS
+    : [...DEFAULT_CORS_ORIGINS, ...devOrigins]
 
 const corsOptions = {
-  origin: effectiveCorsOrigins,
+  origin: isDevMode ? true : effectiveCorsOrigins, // Allow all origins in dev mode
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'] as ('GET' | 'POST' | 'OPTIONS')[],
   allowedHeaders: [
@@ -275,6 +290,7 @@ const corsOptions = {
     'X-Wallet-Address',
     'X-Agent-Id',
   ],
+  exposeHeaders: ['host', 'user-agent', 'accept'],
 }
 
 const app = new Elysia()
@@ -359,7 +375,9 @@ const app = new Elysia()
       })
 
       if (graphqlResult) {
-        console.log(`[REST] /api/agents: using GraphQL proxy (localnet), found ${graphqlResult.total} agents`)
+        console.log(
+          `[REST] /api/agents: using GraphQL proxy (localnet), found ${graphqlResult.total} agents`,
+        )
         return {
           agents: graphqlResult.agents.map((a) => mapAgentSummary(a)),
           total: graphqlResult.total,
@@ -368,7 +386,9 @@ const app = new Elysia()
         }
       }
       // Fall through to SQLit if GraphQL unavailable
-      console.warn('[REST] /api/agents: GraphQL proxy unavailable, falling back to SQLit')
+      console.warn(
+        '[REST] /api/agents: GraphQL proxy unavailable, falling back to SQLit',
+      )
     }
 
     // Production path: use SQLit
@@ -426,20 +446,22 @@ const app = new Elysia()
     }
 
     const agent = agents[0]
-    // Field name varies: tokenUri (SQLit camelCase), tokenURI (TypeORM)
-    const tokenURI = (agent as any).tokenUri || (agent as any).tokenURI
-    if (!tokenURI) {
+    const metadataUri = agent.metadataUri
+    if (!metadataUri) {
       ctx.set.status = 400
-      return { error: `Agent ${id} has no tokenURI`, agentFields: Object.keys(agent) }
+      return {
+        error: `Agent ${id} has no metadataUri`,
+        agentFields: Object.keys(agent),
+      }
     }
 
     // Fetch metadata from IPFS with longer timeout for manual refresh
-    const metadata = await fetchAgentMetadata(tokenURI, id, 15000)
+    const metadata = await fetchAgentMetadata(metadataUri, id, 15000)
     if (!metadata) {
       ctx.set.status = 502
       return {
         error: 'Failed to fetch metadata from IPFS',
-        tokenURI,
+        metadataUri,
         hint: 'The IPFS content may not be available or may have timed out',
       }
     }
@@ -887,8 +909,72 @@ const app = new Elysia()
     // Fallback: redirect to /graphql
     return Response.redirect('/graphql', 302)
   })
+  // Vendor assets for /playground (CSP requires script-src/style-src 'self')
+  .get('/vendor/react.production.min.js', async () => {
+    const file = Bun.file(
+      `${import.meta.dir}/../public/vendor/react.production.min.js`,
+    )
+    if (!(await file.exists())) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return new Response(file, {
+      headers: { 'Content-Type': 'application/javascript' },
+    })
+  })
+  .get('/vendor/react-dom.production.min.js', async () => {
+    const file = Bun.file(
+      `${import.meta.dir}/../public/vendor/react-dom.production.min.js`,
+    )
+    if (!(await file.exists())) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return new Response(file, {
+      headers: { 'Content-Type': 'application/javascript' },
+    })
+  })
+  .get('/vendor/graphiql.min.js', async () => {
+    const file = Bun.file(`${import.meta.dir}/../public/vendor/graphiql.min.js`)
+    if (!(await file.exists())) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return new Response(file, {
+      headers: { 'Content-Type': 'application/javascript' },
+    })
+  })
+  .get('/vendor/graphiql.min.css', async () => {
+    const file = Bun.file(
+      `${import.meta.dir}/../public/vendor/graphiql.min.css`,
+    )
+    if (!(await file.exists())) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return new Response(file, {
+      headers: { 'Content-Type': 'text/css' },
+    })
+  })
+  .get('/vendor/playground.js', async () => {
+    const file = Bun.file(`${import.meta.dir}/../public/vendor/playground.js`)
+    if (!(await file.exists())) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return new Response(file, {
+      headers: { 'Content-Type': 'application/javascript' },
+    })
+  })
   // GraphQL proxy with CORS - forwards to Subsquid GraphQL server
   .post('/graphql', async (ctx: Context) => {
+    // Validate request body structure
+    const body = ctx.body as Record<string, unknown> | undefined
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      typeof body.query !== 'string' ||
+      body.query.length > 10000 // Limit query size
+    ) {
+      ctx.set.status = 400
+      return { errors: [{ message: 'Invalid GraphQL request' }] }
+    }
+
     const graphqlPort = process.env.GQL_PORT ?? '4350'
     const graphqlUrl = `http://localhost:${graphqlPort}/graphql`
 
@@ -898,7 +984,11 @@ const app = new Elysia()
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(ctx.body),
+      body: JSON.stringify({
+        query: body.query,
+        variables: body.variables,
+        operationName: body.operationName,
+      }),
     }).catch((err: Error) => {
       console.error('[REST] GraphQL proxy error:', err.message)
       return null
@@ -909,19 +999,68 @@ const app = new Elysia()
       return { errors: [{ message: 'GraphQL server unavailable' }] }
     }
 
-    const data = await response.json()
-    return data
+    // Validate response structure before returning
+    let data: Record<string, unknown>
+    try {
+      data = (await response.json()) as Record<string, unknown>
+    } catch {
+      ctx.set.status = 502
+      return { errors: [{ message: 'Invalid response from GraphQL server' }] }
+    }
+
+    // Only return expected GraphQL response fields
+    return {
+      data: data.data ?? null,
+      errors: Array.isArray(data.errors) ? data.errors : undefined,
+    }
+  })
+  // Catch-all for unknown API routes - return 404
+  .all('/api/*', (ctx: Context) => {
+    ctx.set.status = 404
+    return { error: 'Not found', path: ctx.path }
   })
   .onError(({ error, set }) => {
     if (error instanceof Error) {
-      console.error('[REST] Unhandled error:', error.message, error.stack)
+      // Only log stack traces in non-production for security
+      if (config.isProduction) {
+        console.error('[REST] Error:', error.name, error.message)
+      } else {
+        console.error('[REST] Error:', error.message, error.stack)
+      }
 
+      // Handle validation errors from Zod/validateParams
+      // For path parameter validation errors, return 404 (resource not found)
+      // For query parameter validation errors, return 400 (bad request)
       if (
         error.name === 'ValidationError' ||
-        error.message.includes('Validation error')
+        error.message.includes('Validation error') ||
+        error.message.includes('Validation failed') ||
+        error.message.includes('Invalid') ||
+        error.message.includes('Must be')
       ) {
+        // Return 404 for path params (e.g., /api/agents/:id) or 400 for query params
+        // Path params contain errors about specific ID/hash/address format
+        const isPathParamError =
+          error.message.includes(':id') ||
+          error.message.includes(':numberOrHash') ||
+          error.message.includes(':hash') ||
+          error.message.includes(':address') ||
+          error.message.includes(':cid') ||
+          error.message.includes(':feedId')
+
+        if (isPathParamError) {
+          set.status = 404
+          return { error: 'Not found', message: error.message }
+        }
+
         set.status = 400
-        return { error: 'Validation error', message: error.message }
+        // Don't expose internal validation details in production
+        return {
+          error: 'Validation error',
+          message: config.isProduction
+            ? 'Invalid request parameters'
+            : error.message,
+        }
       }
 
       if (error instanceof NotFoundError || error.name === 'NotFoundError') {
@@ -934,7 +1073,7 @@ const app = new Elysia()
         return { error: error.message }
       }
     } else {
-      console.error('[REST] Unhandled non-error:', error)
+      console.error('[REST] Unhandled error type')
     }
 
     set.status = 500

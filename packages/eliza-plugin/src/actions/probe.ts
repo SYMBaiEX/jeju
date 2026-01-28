@@ -13,7 +13,11 @@ import type {
   Memory,
   State,
 } from '@elizaos/core'
-import { getDWSUrl, getServicesConfig, getServiceUrl } from '@jejunetwork/config'
+import {
+  getDWSUrl,
+  getServicesConfig,
+  getServiceUrl,
+} from '@jejunetwork/config'
 
 interface Endpoint {
   app: string
@@ -142,16 +146,19 @@ function formatProbeReport(report: ProbeReport): string {
   for (const result of report.results) {
     const app = result.endpoint.app
     if (!byApp.has(app)) byApp.set(app, [])
-    byApp.get(app)!.push(result)
+    byApp.get(app)?.push(result)
   }
 
   for (const [app, results] of byApp) {
     lines.push(`${app}:`)
     for (const result of results) {
       const icon = result.healthy ? '✅' : '❌'
-      const latency = result.latencyMs !== null ? ` (${result.latencyMs}ms)` : ''
+      const latency =
+        result.latencyMs !== null ? ` (${result.latencyMs}ms)` : ''
       const error = result.error ? ` - ${result.error}` : ''
-      lines.push(`  ${icon} ${result.endpoint.method} ${result.endpoint.path}${latency}${error}`)
+      lines.push(
+        `  ${icon} ${result.endpoint.method} ${result.endpoint.path}${latency}${error}`,
+      )
     }
   }
 
@@ -160,7 +167,8 @@ function formatProbeReport(report: ProbeReport): string {
 
 export const probeEndpointsAction: Action = {
   name: 'PROBE_ENDPOINT_PATHS',
-  description: 'Probe all monitored endpoints to check health and measure latency',
+  description:
+    'Probe all monitored endpoints to check health and measure latency',
   similes: [
     'probe endpoints',
     'check endpoints',

@@ -32,7 +32,7 @@ function createTestConfig(
     dataDir: TEST_DATA_DIR,
     region: 'global',
     teeEnabled: false,
-    l2RpcUrl: 'http://localhost:8545',
+    l2RpcUrl: 'http://localhost:6546',
     registryAddress: '0x0000000000000000000000000000000000000000',
     version: '2.0.0-test',
     ...overrides,
@@ -343,12 +343,19 @@ describe('SQLitNode', () => {
     })
 
     it('should throw for non-existent database', async () => {
-      await expect(
-        node.execute({
-          databaseId: 'non-existent',
-          sql: 'SELECT 1',
-        }),
-      ).rejects.toThrow('Database non-existent not found')
+      // Set production mode to disable auto-provisioning
+      const originalEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+      try {
+        await expect(
+          node.execute({
+            databaseId: 'non-existent',
+            sql: 'SELECT 1',
+          }),
+        ).rejects.toThrow('Database non-existent not found')
+      } finally {
+        process.env.NODE_ENV = originalEnv
+      }
     })
 
     it('should throw for invalid SQL', async () => {
@@ -646,7 +653,7 @@ describe('Multi-Node Replication', () => {
       dataDir: PRIMARY_DATA_DIR,
       region: 'global',
       teeEnabled: false,
-      l2RpcUrl: 'http://localhost:8545',
+      l2RpcUrl: 'http://localhost:6546',
       registryAddress: '0x0000000000000000000000000000000000000000',
       version: '2.0.0-test',
     })
@@ -667,7 +674,7 @@ describe('Multi-Node Replication', () => {
       dataDir: PRIMARY_DATA_DIR,
       region: 'global',
       teeEnabled: false,
-      l2RpcUrl: 'http://localhost:8545',
+      l2RpcUrl: 'http://localhost:6546',
       registryAddress: '0x0000000000000000000000000000000000000000',
       version: '2.0.0-test',
     })
@@ -719,7 +726,7 @@ describe('Multi-Node Replication', () => {
       dataDir: PRIMARY_DATA_DIR,
       region: 'global',
       teeEnabled: false,
-      l2RpcUrl: 'http://localhost:8545',
+      l2RpcUrl: 'http://localhost:6546',
       registryAddress: '0x0000000000000000000000000000000000000000',
       version: '2.0.0-test',
     })
@@ -731,7 +738,7 @@ describe('Multi-Node Replication', () => {
       dataDir: REPLICA_DATA_DIR,
       region: 'global',
       teeEnabled: false,
-      l2RpcUrl: 'http://localhost:8545',
+      l2RpcUrl: 'http://localhost:6546',
       registryAddress: '0x0000000000000000000000000000000000000000',
       version: '2.0.0-test',
     })

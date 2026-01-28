@@ -197,7 +197,7 @@ export default function NamesPage() {
                     className="btn-primary w-full py-4 text-lg"
                   >
                     {!isConnected
-                      ? 'Connect Wallet to Register'
+                      ? 'Sign In to Register'
                       : !registrarAddress
                         ? 'JNS Not Available'
                         : registering

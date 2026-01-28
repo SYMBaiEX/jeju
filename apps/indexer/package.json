@@ -25,14 +25,15 @@
     "codegen": "sqd codegen"
   },
   "dependencies": {
-    "@elysiajs/cors": "^1.4.0",
+    "@elysiajs/cors": "1.4.1",
+    "@jejunetwork/cache": "workspace:*",
     "@jejunetwork/db": "workspace:*",
     "@jejunetwork/shared": "workspace:*",
     "@jejunetwork/types": "workspace:*",
     "@subsquid/evm-processor": "1.19.1",
     "@subsquid/typeorm-store": "1.5.1",
     "@subsquid/util-internal": "3.2.0",
-    "elysia": "^1.4.19",
+    "elysia": "1.4.21",
     "pg": "8.16.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

@@ -1,4 +1,5 @@
-import { useJejuAuth } from '@jejunetwork/auth/react'
+import { AuthProvider } from '@jejunetwork/auth'
+import { LoginModal, useJejuAuth } from '@jejunetwork/auth/react'
 import {
   Building2,
   Menu,
@@ -51,21 +52,13 @@ const NAV_LINKS: NavLink[] = [
 export function Header() {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [loginOpen, setLoginOpen] = useState(false)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const { theme, toggleTheme } = useTheme()
 
-  const {
-    authenticated,
-    loading: authLoading,
-    walletAddress,
-    loginWithWallet,
-    logout,
-  } = useJejuAuth()
-
-  const handleConnect = useCallback(async () => {
-    await loginWithWallet()
-  }, [loginWithWallet])
+  const { authenticated, loading: authLoading, walletAddress, logout } =
+    useJejuAuth()
 
   const handleDisconnect = useCallback(async () => {
     await logout()
@@ -259,7 +252,7 @@ export function Header() {
             ) : (
               <button
                 type="button"
-                onClick={handleConnect}
+                onClick={() => setLoginOpen(true)}
                 disabled={authLoading}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 disabled:opacity-60"
                 style={
@@ -273,10 +266,10 @@ export function Header() {
               >
                 <Wallet className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden sm:inline">
-                  {authLoading ? 'Connecting...' : 'Connect Wallet'}
+                  {authLoading ? 'Connecting...' : 'Sign In'}
                 </span>
                 <span className="sm:hidden">
-                  {authLoading ? '...' : 'Connect'}
+                  {authLoading ? '...' : 'Sign In'}
                 </span>
               </button>
             )}
@@ -366,6 +359,24 @@ export function Header() {
           </nav>
         </div>
       )}
+
+      <LoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => setLoginOpen(false)}
+        title="Sign In"
+        subtitle="Use wallet or passkey"
+        providers={[
+          AuthProvider.WALLET,
+          AuthProvider.PASSKEY,
+          AuthProvider.FARCASTER,
+          AuthProvider.GOOGLE,
+          AuthProvider.GITHUB,
+          AuthProvider.TWITTER,
+          AuthProvider.DISCORD,
+        ]}
+        showEmailPhone={false}
+      />
     </header>
   )
 }

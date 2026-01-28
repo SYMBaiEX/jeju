@@ -59,13 +59,13 @@ test.describe('Desktop Viewport', () => {
     await expectButtonClickable(themeToggle, 'Theme Toggle')
   })
 
-  test('connect wallet button is visible', async ({ page }) => {
+  test('sign in button is visible', async ({ page }) => {
     await navigateTo(page, '/')
 
     const connectWallet = page
-      .getByRole('button', { name: /connect wallet/i })
+      .getByRole('button', { name: /sign in/i })
       .first()
-    await expectButtonClickable(connectWallet, 'Connect Wallet')
+    await expectButtonClickable(connectWallet, 'Sign In')
   })
 
   test('buttons have hover states', async ({ page }) => {
@@ -217,7 +217,7 @@ test.describe('Mobile Page-Specific Tests', () => {
     expect(selectCount).toBeGreaterThanOrEqual(2)
 
     const swapBtn = page
-      .getByRole('button', { name: /swap|connect wallet|enter amount/i })
+      .getByRole('button', { name: /swap|sign in|enter amount/i })
       .first()
     await expect(swapBtn).toBeVisible()
   })

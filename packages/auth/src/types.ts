@@ -5,14 +5,12 @@
  * threshold MPC signing, and W3C Verifiable Credentials.
  */
 
-import type { TEEAttestation } from '@jejunetwork/types'
+import type { JsonRecord, TEEAttestation } from '@jejunetwork/types'
 import type { Address, Hex } from 'viem'
-
-/** Generic JSON record type for OAuth state */
-export type JsonRecord = Record<string, unknown>
 
 export const AuthProvider = {
   WALLET: 'wallet',
+  PASSKEY: 'passkey',
   FARCASTER: 'farcaster',
   GOOGLE: 'google',
   APPLE: 'apple',

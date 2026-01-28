@@ -16,6 +16,7 @@ import {
   GetAttestationQuerySchema,
   GetContributorProfileSkillParamsSchema,
   GetLeaderboardSkillParamsSchema,
+  JsonRpcRequestSchema,
   LeaderboardQuerySchema,
   UsernameSchema,
   validateBody,
@@ -974,6 +975,26 @@ const app = new Elysia()
       return { error: 'Rate limit exceeded' }
     }
 
+    // First validate basic JSON-RPC structure
+    const baseRequest = validateBody(
+      JsonRpcRequestSchema,
+      body,
+      'JSON-RPC request',
+    )
+
+    // Check if method is message/send
+    if (baseRequest.method !== 'message/send') {
+      return {
+        jsonrpc: '2.0',
+        id: baseRequest.id,
+        error: {
+          code: -32601,
+          message: `Method not found: ${baseRequest.method}`,
+        },
+      }
+    }
+
+    // Now validate full A2A request structure
     const validated = validateBody(A2ARequestSchema, body, 'A2A request')
     const message = validated.params.message
     const dataPart = message.parts.find((p) => p.kind === 'data')

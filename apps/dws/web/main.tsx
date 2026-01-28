@@ -6,6 +6,7 @@
  */
 
 import { OAuth3Provider } from '@jejunetwork/auth'
+import type { OAuth3AppConfig } from '@jejunetwork/shared'
 import { createDecentralizedWagmiConfig } from '@jejunetwork/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
@@ -60,15 +61,18 @@ if (root) {
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
             <OAuth3Provider
-              config={{
-                appId: 'dws.apps.jeju',
-                redirectUri: `${window.location.origin}/auth/callback`,
-                chainId: CHAIN_ID,
-                rpcUrl: RPC_URL,
-                teeAgentUrl: OAUTH3_AGENT_URL,
-                // Only use decentralized mode when JNS is properly configured
-                decentralized: NETWORK !== 'localnet',
-              }}
+              config={
+                {
+                  appId: 'dws.apps.jeju',
+                  redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+                  chainId: CHAIN_ID,
+                  rpcUrl: RPC_URL,
+                  teeAgentUrl: OAUTH3_AGENT_URL,
+                  network: NETWORK,
+                  // Only use decentralized mode when JNS is properly configured
+                  decentralized: NETWORK !== 'localnet',
+                } satisfies OAuth3AppConfig
+              }
               autoConnect={true}
             >
               <AppProvider>

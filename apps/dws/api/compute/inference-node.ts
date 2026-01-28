@@ -187,6 +187,19 @@ const MODEL_PROVIDERS: Record<string, string[]> = {
   deepseek: ['together', 'local'],
 }
 
+export function getModelHintsForProvider(providerId: string): string[] {
+  const hints = new Set<string>()
+  for (const [modelPrefix, providers] of Object.entries(MODEL_PROVIDERS)) {
+    if (providers.includes(providerId)) {
+      hints.add(modelPrefix)
+    }
+  }
+  if (hints.size === 0) {
+    return ['*']
+  }
+  return Array.from(hints)
+}
+
 let publicClient: PublicClient | null = null
 let computeRegistryAddress: Address | null = null
 

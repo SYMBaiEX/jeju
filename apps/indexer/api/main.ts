@@ -44,22 +44,18 @@ import { processOIFEvents } from './oif-processor'
 import { processOracleEvents } from './oracle-processor'
 import { type ProcessorContext, processor } from './processor'
 import { processRegistryEvents } from './registry-game-processor'
-import { SQLitDatabase } from './sqlit-database'
 import { processStorageEvents } from './storage-processor'
 import { processTFMMEvents } from './tfmm-processor'
 
-// Database mode: 'postgres' (default, for local dev) or 'sqlit' (decentralized)
-const usePostgres = config.indexerMode !== 'sqlit'
+if (config.indexerMode === 'sqlit') {
+  throw new Error(
+    "[Indexer] INDEXER_MODE='sqlit' is not supported yet for the Subsquid processor store. Use INDEXER_MODE='postgres'.",
+  )
+}
 
-import type { FinalDatabase } from '@subsquid/util-internal-processor-tools'
+const db = new TypeormDatabase({ supportHotBlocks: true })
 
-const db = usePostgres
-  ? new TypeormDatabase({ supportHotBlocks: true })
-  : (new SQLitDatabase({
-      databaseId: config.sqlitDatabaseId || 'indexer-testnet',
-    }) as unknown as FinalDatabase<Store>)
-
-console.log(`[Indexer] Using ${usePostgres ? 'PostgreSQL (TypeORM)' : 'SQLit'} database`)
+console.log('[Indexer] Using PostgreSQL (TypeORM) database')
 
 processor.run(db, async (ctx: ProcessorContext<Store>) => {
   const blocks: BlockEntity[] = []
@@ -156,14 +152,10 @@ processor.run(db, async (ctx: ProcessorContext<Store>) => {
         transferCount: 0,
         lastUpdated: timestamp,
       })
-      // Store block number for last_updated_block column
-      ;(balance as unknown as { blockNumber?: number }).blockNumber =
-        block.number
       tokenBalances.set(id, balance)
     } else {
-      // Update block number when balance is updated
-      ;(balance as unknown as { blockNumber?: number }).blockNumber =
-        block.number
+      // Update timestamp when balance is modified
+      balance.lastUpdated = timestamp
     }
     return balance
   }
