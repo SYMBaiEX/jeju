@@ -99,6 +99,7 @@ pub struct ContractAddresses {
     pub identity_registry: Address,
     pub ban_manager: Address,
     pub jeju_token: Address,
+    pub compute_staking: Address,
 }
 
 impl ContractAddresses {
@@ -113,6 +114,8 @@ impl ContractAddresses {
                 .map_err(|e| format!("Invalid ban_manager address: {}", e))?,
             jeju_token: Address::from_str(&config.jeju_token)
                 .map_err(|e| format!("Invalid jeju_token address: {}", e))?,
+            compute_staking: Address::from_str(&config.compute_staking)
+                .map_err(|e| format!("Invalid compute_staking address: {}", e))?,
         })
     }
 

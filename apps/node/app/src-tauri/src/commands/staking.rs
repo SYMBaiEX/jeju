@@ -1,38 +1,42 @@
 use crate::state::AppState;
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U256};
 use alloy::sol;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tauri::State;
 
+// Staking contract interface (matches Staking.sol)
 sol! {
     #[sol(rpc)]
-    interface IComputeStaking {
-        function stakeAsProvider() external payable;
-        function getStake(address staker) external view returns (uint256 amount, uint8 stakeType, uint256 stakedAt);
-        function unstake() external;
-        function pendingRewards(address staker) external view returns (uint256);
-        function claimRewards() external returns (uint256);
+    interface IStaking {
+        function stake(uint256 amount) external;
+        function startUnbonding(uint256 amount) external;
+        function completeUnstaking() external;
+        function positions(address user) external view returns (
+            uint256 stakedAmount,
+            uint256 stakedAt,
+            uint256 linkedAgentId,
+            uint256 reputationBonus,
+            uint256 unbondingAmount,
+            uint256 unbondingStartTime,
+            bool isActive,
+            bool isFrozen
+        );
+        function getTier(address user) external view returns (uint8);
+        function totalStaked() external view returns (uint256);
     }
 }
 
+// ERC20 interface for token approval
 sol! {
     #[sol(rpc)]
-    interface INodeStakingManager {
-        function getNodeInfo(address operator) external view returns (
-            address stakeToken,
-            uint256 stakeAmount,
-            address rewardToken,
-            string rpcUrl,
-            string region,
-            uint256 registeredAt,
-            uint256 uptime,
-            uint256 requestsServed
-        );
-        function nodePendingRewards(address operator) external view returns (uint256);
-        function nodeClaimRewards() external returns (uint256);
+    interface IERC20 {
+        function approve(address spender, uint256 amount) external returns (bool);
+        function allowance(address owner, address spender) external view returns (uint256);
+        function balanceOf(address account) external view returns (uint256);
     }
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StakingInfo {
@@ -158,24 +162,65 @@ pub async fn stake(
 ) -> Result<StakeResult, String> {
     let inner = state.inner.read().await;
 
-    let _wallet_manager = inner
+    let wallet_manager = inner
         .wallet_manager
         .as_ref()
         .ok_or("Wallet not connected")?;
 
-    // Verify contract client
-    if inner.contract_client.is_none() {
-        return Err("Contract client not initialized".to_string());
+    // Get contract addresses from config
+    let staking_address = &inner.config.network.contracts.compute_staking;
+    let token_address = &inner.config.network.contracts.jeju_token;
+
+    if staking_address.is_empty() || staking_address == "0x0000000000000000000000000000000000000000" {
+        return Err("Staking contract not configured for this network".to_string());
     }
 
-    // Staking requires a signed transaction
-    Err(format!(
-        "To stake {} wei to service {}: Use the wallet interface to sign the staking transaction. \
-         Token: {}",
-        request.amount_wei,
-        request.service_id,
-        request.token_address.unwrap_or_else(|| "JEJU".to_string())
-    ))
+    let amount = U256::from_str(&request.amount_wei)
+        .map_err(|e| format!("Invalid amount: {}", e))?;
+
+    // Step 1: Approve the staking contract to spend JEJU tokens
+    // Encode: approve(address spender, uint256 amount)
+    let approve_data = {
+        let spender = Address::from_str(staking_address)
+            .map_err(|e| format!("Invalid staking address: {}", e))?;
+        let mut data = vec![0x09, 0x5e, 0xa7, 0xb3]; // approve(address,uint256) selector
+        data.extend_from_slice(&[0u8; 12]); // pad address to 32 bytes
+        data.extend_from_slice(spender.as_slice());
+        data.extend_from_slice(&amount.to_be_bytes::<32>());
+        hex::encode(&data)
+    };
+
+    tracing::info!("Approving {} JEJU tokens for staking contract", request.amount_wei);
+
+    let approve_result = wallet_manager
+        .send_transaction(token_address, "0", Some(&approve_data))
+        .await
+        .map_err(|e| format!("Failed to approve tokens: {}", e))?;
+
+    tracing::info!("Approval tx: {}", approve_result.hash);
+
+    // Step 2: Call stake(uint256 amount) on the staking contract
+    let stake_data = {
+        let mut data = vec![0xa6, 0x94, 0xfc, 0x3a]; // stake(uint256) selector
+        data.extend_from_slice(&amount.to_be_bytes::<32>());
+        hex::encode(&data)
+    };
+
+    tracing::info!("Staking {} JEJU tokens", request.amount_wei);
+
+    let stake_result = wallet_manager
+        .send_transaction(staking_address, "0", Some(&stake_data))
+        .await
+        .map_err(|e| format!("Failed to stake: {}", e))?;
+
+    tracing::info!("Stake tx: {}", stake_result.hash);
+
+    Ok(StakeResult {
+        success: true,
+        tx_hash: Some(stake_result.hash),
+        new_stake_wei: request.amount_wei,
+        error: None,
+    })
 }
 
 #[tauri::command]
@@ -185,51 +230,84 @@ pub async fn unstake(
 ) -> Result<StakeResult, String> {
     let inner = state.inner.read().await;
 
-    let _wallet_manager = inner
+    let wallet_manager = inner
         .wallet_manager
         .as_ref()
         .ok_or("Wallet not connected")?;
 
-    // Verify contract client
-    if inner.contract_client.is_none() {
-        return Err("Contract client not initialized".to_string());
+    // Get staking contract address from config
+    let staking_address = &inner.config.network.contracts.compute_staking;
+
+    if staking_address.is_empty() || staking_address == "0x0000000000000000000000000000000000000000" {
+        return Err("Staking contract not configured for this network".to_string());
     }
 
-    // Unstaking requires a signed transaction
-    Err(format!(
-        "To unstake {} wei from service {}: Use the wallet interface to sign the unstake transaction.",
-        request.amount_wei, request.service_id
-    ))
+    let amount = U256::from_str(&request.amount_wei)
+        .map_err(|e| format!("Invalid amount: {}", e))?;
+
+    // Call startUnbonding(uint256 amount) on the staking contract
+    // This starts the 7-day unbonding period
+    let unbond_data = {
+        let mut data = vec![0x5a, 0xf0, 0x61, 0x86]; // startUnbonding(uint256) selector
+        data.extend_from_slice(&amount.to_be_bytes::<32>());
+        hex::encode(&data)
+    };
+
+    tracing::info!("Starting unbonding of {} JEJU tokens", request.amount_wei);
+
+    let result = wallet_manager
+        .send_transaction(staking_address, "0", Some(&unbond_data))
+        .await
+        .map_err(|e| format!("Failed to start unbonding: {}", e))?;
+
+    tracing::info!("Unbonding tx: {}", result.hash);
+
+    Ok(StakeResult {
+        success: true,
+        tx_hash: Some(result.hash),
+        new_stake_wei: "0".to_string(), // Will be updated after unbonding completes
+        error: None,
+    })
 }
 
 #[tauri::command]
 pub async fn claim_rewards(
     state: State<'_, AppState>,
-    service_id: Option<String>,
+    _service_id: Option<String>,
 ) -> Result<ClaimResult, String> {
     let inner = state.inner.read().await;
 
-    let _wallet_manager = inner
+    let wallet_manager = inner
         .wallet_manager
         .as_ref()
         .ok_or("Wallet not connected")?;
 
-    // Verify contract client
-    if inner.contract_client.is_none() {
-        return Err("Contract client not initialized".to_string());
+    // Get staking contract address from config
+    let staking_address = &inner.config.network.contracts.compute_staking;
+
+    if staking_address.is_empty() || staking_address == "0x0000000000000000000000000000000000000000" {
+        return Err("Staking contract not configured for this network".to_string());
     }
 
-    // Claiming requires a signed transaction
-    match service_id {
-        Some(id) => Err(format!(
-            "To claim rewards from service {}: Use the wallet interface to sign the claim transaction.",
-            id
-        )),
-        None => Err(
-            "To claim all rewards: Use the wallet interface to sign the claim transaction."
-                .to_string(),
-        ),
-    }
+    // Call completeUnstaking() to complete the unbonding and receive tokens
+    // This will fail if unbonding period hasn't completed
+    let complete_data = hex::encode(&[0x68, 0x6a, 0x4f, 0x68]); // completeUnstaking() selector
+
+    tracing::info!("Completing unstaking (claiming unbonded tokens)");
+
+    let result = wallet_manager
+        .send_transaction(staking_address, "0", Some(&complete_data))
+        .await
+        .map_err(|e| format!("Failed to complete unstaking: {}. Make sure the 7-day unbonding period has passed.", e))?;
+
+    tracing::info!("Complete unstaking tx: {}", result.hash);
+
+    Ok(ClaimResult {
+        success: true,
+        tx_hash: Some(result.hash),
+        amount_claimed_wei: "0".to_string(), // Amount will be in tx receipt
+        error: None,
+    })
 }
 
 #[tauri::command]
