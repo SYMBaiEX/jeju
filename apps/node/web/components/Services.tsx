@@ -82,27 +82,20 @@ export function Services() {
   }
 
   const handleToggleService = async (service: ServiceWithStatus) => {
-    console.log(`[handleToggleService] Called for service: "${service.metadata.id}", running: ${service.status.running}`)
+    alert('handleToggleService called, wallet=' + (wallet ? 'yes' : 'no'))
     if (!wallet) {
-      console.log(`[handleToggleService] No wallet - showing alert`)
-      alert('Please connect a wallet first')
+      alert('No wallet!')
       return
     }
 
     if (service.status.running) {
-      console.log(`[handleToggleService] Service is running, attempting to stop...`)
-      if (service.metadata.id === 'sequencer') {
-        if (
-          !confirm(
-            'Stopping the sequencer may result in missed blocks and slashing. Are you sure?',
-          )
-        ) {
-          return
-        }
+      alert('About to call stopService for: ' + service.metadata.id)
+      try {
+        await stopService(service.metadata.id)
+        alert('stopService completed successfully!')
+      } catch (err: any) {
+        alert('stopService ERROR: ' + err.message)
       }
-      console.log(`[handleToggleService] Calling stopService("${service.metadata.id}")`)
-      await stopService(service.metadata.id)
-      console.log(`[handleToggleService] stopService completed`)
     } else {
       if (service.metadata.id === 'sequencer') {
         setConfirmingSequencer(true)
