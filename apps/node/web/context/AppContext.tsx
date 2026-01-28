@@ -184,11 +184,14 @@ export function AppProvider({ children }: AppProviderProps) {
       operationName: string,
       fn: () => Promise<T>,
     ): Promise<T | undefined> => {
+      console.log(`[withOperationLock] Attempting: "${operationName}", current pending: "${pendingOperationRef.current}"`)
       if (pendingOperationRef.current !== null) {
         // If same operation is already in progress, skip silently (handles React 18 double-invoke)
         if (pendingOperationRef.current === operationName) {
+          console.log(`[withOperationLock] SKIPPED - same operation already in progress`)
           return undefined
         }
+        console.error(`[withOperationLock] BLOCKED by: "${pendingOperationRef.current}"`)
         throw new Error(
           `Operation "${operationName}" blocked: "${pendingOperationRef.current}" is already in progress`,
         )
@@ -310,6 +313,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const stopService = useCallback(
     async (serviceId: string) => {
+      console.log(`[stopService] Called with serviceId: "${serviceId}"`)
       if (
         !serviceId ||
         typeof serviceId !== 'string' ||
@@ -319,9 +323,12 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       await withOperationLock(`Stopping ${serviceId}`, async () => {
+        console.log(`[stopService] Invoking stop_service for: "${serviceId}"`)
         await invoke('stop_service', { service_id: serviceId })
+        console.log(`[stopService] stop_service completed, fetching services...`)
         await fetchServices()
       })
+      console.log(`[stopService] Completed for: "${serviceId}"`)
     },
     [withOperationLock, fetchServices],
   )
