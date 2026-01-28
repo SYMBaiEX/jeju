@@ -50,29 +50,31 @@ export function Staking() {
   const handleStake = async () => {
     if (!stakingService) return
     const amountWei = (parseFloat(stakeAmount) * 1e18).toString()
-    alert(`Attempting to stake ${stakeAmount} ETH (${amountWei} wei) to service: ${stakingService}`)
     try {
       const result = await stake(stakingService, amountWei)
-      alert(`Stake successful! Result: ${JSON.stringify(result)}`)
+      if (result?.tx_hash) {
+        alert(`Stake successful! Transaction: ${result.tx_hash}`)
+      }
       setStakingService(null)
       setStakeAmount('0.1')
     } catch (err: any) {
-      alert(`Stake ERROR: ${err?.message || JSON.stringify(err)}`)
+      alert(`Stake failed: ${err?.message || JSON.stringify(err)}`)
     }
   }
 
   const handleUnstake = async () => {
     if (!stakingService) return
     const amountWei = (parseFloat(stakeAmount) * 1e18).toString()
-    alert(`Attempting to unstake ${stakeAmount} ETH (${amountWei} wei) from service: ${stakingService}`)
     try {
       const result = await unstake(stakingService, amountWei)
-      alert(`Unstake successful! Result: ${JSON.stringify(result)}`)
+      if (result?.tx_hash) {
+        alert(`Unstake initiated! Transaction: ${result.tx_hash}\n\nNote: 7-day unbonding period starts now.`)
+      }
       setStakingService(null)
       setStakeAmount('0.1')
       setIsUnstaking(false)
     } catch (err: any) {
-      alert(`Unstake ERROR: ${err?.message || JSON.stringify(err)}`)
+      alert(`Unstake failed: ${err?.message || JSON.stringify(err)}`)
     }
   }
 

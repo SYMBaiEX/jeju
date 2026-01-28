@@ -391,9 +391,11 @@ export function AppProvider({ children }: AppProviderProps) {
         token_address: null,
       })
 
-      await withOperationLock('Staking', async () => {
-        await invoke('stake', { request })
+      return await withOperationLock('Staking', async () => {
+        const result = await invoke('stake', { request })
+        console.log('[stake] Tauri result:', result)
         await fetchStaking()
+        return result
       })
     },
     [withOperationLock, fetchStaking],
@@ -406,9 +408,11 @@ export function AppProvider({ children }: AppProviderProps) {
         amount_wei: amountWei,
       })
 
-      await withOperationLock('Unstaking', async () => {
-        await invoke('unstake', { request })
+      return await withOperationLock('Unstaking', async () => {
+        const result = await invoke('unstake', { request })
+        console.log('[unstake] Tauri result:', result)
         await fetchStaking()
+        return result
       })
     },
     [withOperationLock, fetchStaking],
