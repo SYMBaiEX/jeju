@@ -167,12 +167,11 @@ pub async fn start_service(
             );
         }
 
-        // Default Ollama endpoint - use public IP so DWS can reach it
-        // In production, this should be the node's public IP or configured via settings
+        // Default Ollama endpoint - use localhost since Ollama typically binds to 127.0.0.1
+        // Can be overridden via OLLAMA_HOST environment variable
         if !config.custom_settings.contains_key("ollama_endpoint") {
-            // Try to get public IP from environment or use default
             let ollama_host = std::env::var("OLLAMA_HOST")
-                .unwrap_or_else(|_| "http://192.9.153.231:11434".to_string());
+                .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
             config.custom_settings.insert(
                 "ollama_endpoint".to_string(),
                 serde_json::Value::String(ollama_host),
