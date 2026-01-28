@@ -94,7 +94,7 @@ export function Services() {
         await stopService(service.metadata.id)
         alert('stopService completed successfully!')
       } catch (err: any) {
-        alert('stopService ERROR: ' + err.message)
+        alert('stopService ERROR: ' + JSON.stringify(err))
       }
     } else {
       if (service.metadata.id === 'sequencer') {
