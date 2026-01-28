@@ -33,6 +33,9 @@ pub async fn get_available_services(
     let mut detector = HardwareDetector::new();
     let hardware = detector.detect();
 
+    // Get all service statuses at once
+    let all_statuses = inner.service_manager.get_all_status().await;
+
     // Get all services with their metadata and requirements
     let services: Vec<ServiceWithStatus> = inner
         .service_manager
@@ -41,30 +44,30 @@ pub async fn get_available_services(
         .map(|metadata| {
             let service_id: ServiceId = metadata.id.parse().unwrap_or(ServiceId::Compute);
 
-            // Check requirements
+            // Check requirements - use lower thresholds for basic services
             let reqs = match service_id {
                 ServiceId::Compute => crate::hardware::ServiceRequirements {
-                    min_cpu_cores: 8,
-                    min_memory_mb: 32 * 1024,
-                    min_storage_gb: 100,
-                    requires_gpu: true,
-                    min_gpu_memory_mb: Some(8 * 1024),
-                    requires_tee: false,
-                    min_bandwidth_mbps: Some(100),
-                },
-                ServiceId::Sequencer => crate::hardware::ServiceRequirements {
-                    min_cpu_cores: 8,
-                    min_memory_mb: 32 * 1024,
-                    min_storage_gb: 2000,
-                    requires_gpu: false,
-                    min_gpu_memory_mb: None,
-                    requires_tee: false,
-                    min_bandwidth_mbps: Some(1000),
-                },
-                _ => crate::hardware::ServiceRequirements {
                     min_cpu_cores: 2,
                     min_memory_mb: 4 * 1024,
                     min_storage_gb: 50,
+                    requires_gpu: false, // GPU is optional, not required
+                    min_gpu_memory_mb: None,
+                    requires_tee: false,
+                    min_bandwidth_mbps: Some(10),
+                },
+                ServiceId::Sequencer => crate::hardware::ServiceRequirements {
+                    min_cpu_cores: 4,
+                    min_memory_mb: 16 * 1024,
+                    min_storage_gb: 500,
+                    requires_gpu: false,
+                    min_gpu_memory_mb: None,
+                    requires_tee: false,
+                    min_bandwidth_mbps: Some(100),
+                },
+                _ => crate::hardware::ServiceRequirements {
+                    min_cpu_cores: 1,
+                    min_memory_mb: 2 * 1024,
+                    min_storage_gb: 20,
                     requires_gpu: false,
                     min_gpu_memory_mb: None,
                     requires_tee: false,
@@ -74,16 +77,22 @@ pub async fn get_available_services(
 
             let (meets, issues) = detector.meets_requirements(&hardware, &reqs);
 
-            ServiceWithStatus {
-                metadata: metadata.clone(),
-                status: ServiceState {
+            // Get actual service status from the service manager
+            let status = all_statuses
+                .get(service_id.as_str())
+                .cloned()
+                .unwrap_or_else(|| ServiceState {
                     running: false,
                     uptime_seconds: 0,
                     requests_served: 0,
                     earnings_wei: "0".to_string(),
                     last_error: None,
                     health: "stopped".to_string(),
-                },
+                });
+
+            ServiceWithStatus {
+                metadata: metadata.clone(),
+                status,
                 meets_requirements: meets,
                 requirement_issues: issues,
             }
