@@ -5,25 +5,23 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tauri::State;
 
-// Staking contract interface (matches Staking.sol)
+// MultiServiceStakeManager interface
 sol! {
     #[sol(rpc)]
-    interface IStaking {
+    interface IMultiServiceStakeManager {
         function stake(uint256 amount) external;
         function startUnbonding(uint256 amount) external;
         function completeUnstaking() external;
         function positions(address user) external view returns (
-            uint256 stakedAmount,
+            uint256 totalStaked,
             uint256 stakedAt,
-            uint256 linkedAgentId,
-            uint256 reputationBonus,
             uint256 unbondingAmount,
             uint256 unbondingStartTime,
             bool isActive,
             bool isFrozen
         );
-        function getTier(address user) external view returns (uint8);
         function totalStaked() external view returns (uint256);
+        function pendingRewards(address user) external view returns (uint256);
     }
 }
 
@@ -93,13 +91,9 @@ pub struct ClaimResult {
 
 #[tauri::command]
 pub async fn get_staking_info(state: State<'_, AppState>) -> Result<StakingInfo, String> {
-    let inner = state.inner.read().await;
+    use alloy::providers::{Provider, ProviderBuilder};
 
-    // Get contract client and wallet
-    let contract_client = inner
-        .contract_client
-        .as_ref()
-        .ok_or("Contract client not initialized. Connect wallet first.")?;
+    let inner = state.inner.read().await;
 
     let wallet = inner
         .wallet_manager
@@ -107,49 +101,69 @@ pub async fn get_staking_info(state: State<'_, AppState>) -> Result<StakingInfo,
         .ok_or("Wallet not connected")?;
 
     let wallet_info = wallet.get_info().ok_or("Failed to get wallet info")?;
-    let operator = Address::from_str(&wallet_info.address)
+    let user_address = Address::from_str(&wallet_info.address)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    // Query staking contracts for current stake amounts
-    let stakes = contract_client
-        .get_staking_info(operator)
-        .await
-        .unwrap_or_default();
-
-    // Aggregate stake info
-    let mut total_staked: u128 = 0;
-    let mut total_staked_usd: f64 = 0.0;
-    let mut total_pending: u128 = 0;
-    let mut service_stakes = Vec::new();
-
-    for stake in stakes {
-        let staked_amount: u128 = stake.staked_amount.parse().unwrap_or(0);
-        let staked_usd: f64 = stake.staked_value_usd.parse().unwrap_or(0.0) / 1e18;
-        let pending: u128 = stake.pending_rewards.parse().unwrap_or(0);
-
-        total_staked += staked_amount;
-        total_staked_usd += staked_usd;
-        total_pending += pending;
-
-        service_stakes.push(ServiceStakeInfo {
-            service_id: stake.node_id.clone(),
-            service_name: format!("Node {}", &stake.node_id[..10]),
-            staked_wei: stake.staked_amount,
-            staked_usd,
-            pending_rewards_wei: stake.pending_rewards,
-            stake_token: stake.staking_token,
-            min_stake_wei: "1000000000000000000000".to_string(), // 1000 JEJU minimum
+    // Get staking contract address from config
+    let staking_address = &inner.config.network.contracts.compute_staking;
+    if staking_address.is_empty() || staking_address == "0x0000000000000000000000000000000000000000" {
+        return Ok(StakingInfo {
+            total_staked_wei: "0".to_string(),
+            total_staked_usd: 0.0,
+            staked_by_service: vec![],
+            pending_rewards_wei: "0".to_string(),
+            pending_rewards_usd: 0.0,
+            can_unstake: false,
+            unstake_cooldown_seconds: 14 * 24 * 60 * 60, // 14 days for MultiServiceStakeManager
+            auto_claim_enabled: inner.config.earnings.auto_claim,
+            next_auto_claim_timestamp: None,
         });
     }
 
+    let staking_addr = Address::from_str(staking_address)
+        .map_err(|e| format!("Invalid staking address: {}", e))?;
+
+    // Create provider
+    let rpc_url: alloy::transports::http::reqwest::Url = inner.config.network.rpc_url
+        .parse()
+        .map_err(|e| format!("Invalid RPC URL: {}", e))?;
+    let provider = ProviderBuilder::new().on_http(rpc_url);
+
+    // Query positions from MultiServiceStakeManager
+    let staking = IMultiServiceStakeManager::new(staking_addr, &provider);
+
+    let position = staking
+        .positions(user_address)
+        .call()
+        .await
+        .map_err(|e| format!("Failed to get staking position: {}", e))?;
+
+    let total_staked: u128 = position.totalStaked.to::<u128>();
+    let can_unstake = position.isActive && total_staked > 0;
+
+    // For now, we don't have per-service breakdown - just show total
+    let service_stakes = if total_staked > 0 {
+        vec![ServiceStakeInfo {
+            service_id: "multi-service".to_string(),
+            service_name: "Multi-Service Stake".to_string(),
+            staked_wei: total_staked.to_string(),
+            staked_usd: 0.0, // Would need price oracle
+            pending_rewards_wei: "0".to_string(), // Would need to query pendingRewards
+            stake_token: inner.config.network.contracts.jeju_token.clone(),
+            min_stake_wei: "100000000000000000".to_string(), // 0.1 JEJU minimum
+        }]
+    } else {
+        vec![]
+    };
+
     Ok(StakingInfo {
         total_staked_wei: total_staked.to_string(),
-        total_staked_usd,
+        total_staked_usd: 0.0,
         staked_by_service: service_stakes,
-        pending_rewards_wei: total_pending.to_string(),
-        pending_rewards_usd: (total_pending as f64) / 1e18,
-        can_unstake: total_staked > 0,
-        unstake_cooldown_seconds: 7 * 24 * 60 * 60, // 7 days
+        pending_rewards_wei: "0".to_string(),
+        pending_rewards_usd: 0.0,
+        can_unstake,
+        unstake_cooldown_seconds: 14 * 24 * 60 * 60, // 14 days
         auto_claim_enabled: inner.config.earnings.auto_claim,
         next_auto_claim_timestamp: None,
     })
