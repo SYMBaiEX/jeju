@@ -23,16 +23,24 @@ const CreateWalletRequestSchema = z.object({
 
 const ImportWalletRequestSchema = z
   .object({
-    private_key: z
-      .string()
-      .regex(/^0x[a-fA-F0-9]{64}$/)
-      .nullable(),
-    mnemonic: z.string().min(1).nullable(),
+    private_key: z.string().nullable(),
+    mnemonic: z.string().nullable(),
     password: z.string().min(8, 'Password must be at least 8 characters'),
   })
   .refine((data) => (data.private_key !== null) !== (data.mnemonic !== null), {
     message: 'Must provide either private_key or mnemonic, not both',
   })
+  .refine(
+    (data) => {
+      if (data.private_key) {
+        // Allow with or without 0x, 64 hex chars
+        const key = data.private_key.replace(/^0x/, '')
+        return /^[a-fA-F0-9]{64}$/.test(key)
+      }
+      return true
+    },
+    { message: 'Private key must be 64 hex characters (with or without 0x prefix)' }
+  )
 
 type WalletAction = 'create' | 'import' | 'external' | null
 
@@ -49,42 +57,56 @@ export function WalletView() {
   const [error, setError] = useState<string | null>(null)
 
   const handleCreate = async () => {
-    const request = CreateWalletRequestSchema.parse({ password })
+    try {
+      const request = CreateWalletRequestSchema.parse({ password })
 
-    setLoading(true)
-    setError(null)
+      setLoading(true)
+      setError(null)
 
-    await invoke('create_wallet', { request })
-    await fetchWallet()
-    await fetchBalance()
-    setAction(null)
-    setPassword('')
-    setLoading(false)
+      await invoke('create_wallet', { request })
+      await fetchWallet()
+      await fetchBalance()
+      setAction(null)
+      setPassword('')
+    } catch (err) {
+      console.error('Create wallet error:', err)
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleImport = async () => {
-    const request = ImportWalletRequestSchema.parse({
-      private_key:
-        importType === 'key'
-          ? privateKey.startsWith('0x')
-            ? privateKey
-            : `0x${privateKey}`
-          : null,
-      mnemonic: importType === 'mnemonic' ? mnemonic : null,
-      password,
-    })
+    try {
+      const trimmedKey = privateKey.trim()
+      const trimmedMnemonic = mnemonic.trim()
+      const request = ImportWalletRequestSchema.parse({
+        private_key:
+          importType === 'key'
+            ? trimmedKey.startsWith('0x')
+              ? trimmedKey
+              : `0x${trimmedKey}`
+            : null,
+        mnemonic: importType === 'mnemonic' ? trimmedMnemonic : null,
+        password,
+      })
 
-    setLoading(true)
-    setError(null)
+      setLoading(true)
+      setError(null)
 
-    await invoke('import_wallet', { request })
-    await fetchWallet()
-    await fetchBalance()
-    setAction(null)
-    setPassword('')
-    setPrivateKey('')
-    setMnemonic('')
-    setLoading(false)
+      await invoke('import_wallet', { request })
+      await fetchWallet()
+      await fetchBalance()
+      setAction(null)
+      setPassword('')
+      setPrivateKey('')
+      setMnemonic('')
+    } catch (err) {
+      console.error('Import wallet error:', err)
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const copyAddress = () => {
@@ -285,6 +307,9 @@ export function WalletView() {
                             className="input h-24"
                             placeholder="Enter your 12 or 24 word seed phrase"
                           />
+                          <p className="text-xs text-yellow-500 mt-1">
+                            Note: Seed phrase import uses simplified derivation. For exact address matching, use private key import.
+                          </p>
                         </div>
                       ) : (
                         <div>

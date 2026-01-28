@@ -166,6 +166,9 @@ import { convertHardwareToSnakeCase, detectHardware } from '../api/lib/hardware'
 // Mock wallet state
 let mockWallet: { address: string; wallet_type: string; agent_id: number | null; is_registered: boolean } | null = null
 
+// Track enabled services
+const enabledServices: Set<string> = new Set()
+
 // Mock data for development
 function getMockHardware() {
   const rawHardware = detectHardware()
@@ -174,6 +177,58 @@ function getMockHardware() {
 
 function getMockWallet() {
   return mockWallet
+}
+
+// Fetch real balance from L2 RPC
+const JEJU_TOKEN_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+
+async function getRealBalance(): Promise<{ eth: string; jeju: string; staked: string; pending_rewards: string }> {
+  if (!mockWallet?.address) {
+    return { eth: '0', jeju: '0', staked: '0', pending_rewards: '0' }
+  }
+
+  try {
+    // Fetch ETH balance
+    const ethResponse = await fetch('http://localhost:6546', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getBalance',
+        params: [mockWallet.address, 'latest'],
+        id: 1,
+      }),
+    })
+    const ethData = await ethResponse.json() as { result?: string }
+    const ethBalanceWei = ethData.result ? BigInt(ethData.result) : BigInt(0)
+
+    // Fetch JEJU token balance (balanceOf call)
+    // Function selector for balanceOf(address) is 0x70a08231
+    const balanceOfData = '0x70a08231000000000000000000000000' + mockWallet.address.slice(2).toLowerCase()
+    const jejuResponse = await fetch('http://localhost:6546', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_call',
+        params: [{ to: JEJU_TOKEN_ADDRESS, data: balanceOfData }, 'latest'],
+        id: 2,
+      }),
+    })
+    const jejuData = await jejuResponse.json() as { result?: string }
+    const jejuBalanceWei = jejuData.result ? BigInt(jejuData.result) : BigInt(0)
+
+    // Return wei as string - frontend handles formatting
+    return {
+      eth: ethBalanceWei.toString(),
+      jeju: jejuBalanceWei.toString(),
+      staked: '0',
+      pending_rewards: '0',
+    }
+  } catch (error) {
+    console.error('Failed to fetch balance:', error)
+    return { eth: '0', jeju: '0', staked: '0', pending_rewards: '0' }
+  }
 }
 
 function getMockBalance() {
@@ -186,6 +241,12 @@ function getMockBalance() {
 }
 
 function getMockServices() {
+  const computeRunning = enabledServices.has('compute')
+  const proxyRunning = enabledServices.has('proxy')
+  const storageRunning = enabledServices.has('storage')
+  const cronRunning = enabledServices.has('cron')
+  const oracleRunning = enabledServices.has('oracle')
+
   return [
     {
       metadata: {
@@ -208,12 +269,12 @@ function getMockServices() {
         is_advanced: false,
       },
       status: {
-        running: false,
-        uptime_seconds: 0,
-        requests_served: 0,
-        earnings_wei: '0',
+        running: computeRunning,
+        uptime_seconds: computeRunning ? Math.floor(Date.now() / 1000) % 3600 : 0,
+        requests_served: computeRunning ? Math.floor(Math.random() * 100) : 0,
+        earnings_wei: computeRunning ? '1000000000000000' : '0',
         last_error: null,
-        health: 'stopped',
+        health: computeRunning ? 'healthy' : 'stopped',
       },
       meets_requirements: true,
       requirement_issues: [],
@@ -239,12 +300,12 @@ function getMockServices() {
         is_advanced: false,
       },
       status: {
-        running: false,
-        uptime_seconds: 0,
-        requests_served: 0,
-        earnings_wei: '0',
+        running: proxyRunning,
+        uptime_seconds: proxyRunning ? Math.floor(Date.now() / 1000) % 3600 : 0,
+        requests_served: proxyRunning ? Math.floor(Math.random() * 50) : 0,
+        earnings_wei: proxyRunning ? '500000000000000' : '0',
         last_error: null,
-        health: 'stopped',
+        health: proxyRunning ? 'healthy' : 'stopped',
       },
       meets_requirements: true,
       requirement_issues: [],
@@ -269,12 +330,12 @@ function getMockServices() {
         is_advanced: false,
       },
       status: {
-        running: false,
-        uptime_seconds: 0,
-        requests_served: 0,
-        earnings_wei: '0',
+        running: storageRunning,
+        uptime_seconds: storageRunning ? Math.floor(Date.now() / 1000) % 3600 : 0,
+        requests_served: storageRunning ? Math.floor(Math.random() * 20) : 0,
+        earnings_wei: storageRunning ? '300000000000000' : '0',
         last_error: null,
-        health: 'stopped',
+        health: storageRunning ? 'healthy' : 'stopped',
       },
       meets_requirements: false,
       requirement_issues: ['Insufficient storage space (need 500GB)'],
@@ -300,12 +361,12 @@ function getMockServices() {
         is_advanced: false,
       },
       status: {
-        running: false,
-        uptime_seconds: 0,
-        requests_served: 0,
-        earnings_wei: '0',
+        running: cronRunning,
+        uptime_seconds: cronRunning ? Math.floor(Date.now() / 1000) % 3600 : 0,
+        requests_served: cronRunning ? Math.floor(Math.random() * 30) : 0,
+        earnings_wei: cronRunning ? '100000000000000' : '0',
         last_error: null,
-        health: 'stopped',
+        health: cronRunning ? 'healthy' : 'stopped',
       },
       meets_requirements: true,
       requirement_issues: [],
@@ -331,12 +392,12 @@ function getMockServices() {
         is_advanced: true,
       },
       status: {
-        running: false,
-        uptime_seconds: 0,
-        requests_served: 0,
-        earnings_wei: '0',
+        running: oracleRunning,
+        uptime_seconds: oracleRunning ? Math.floor(Date.now() / 1000) % 3600 : 0,
+        requests_served: oracleRunning ? Math.floor(Math.random() * 10) : 0,
+        earnings_wei: oracleRunning ? '1000000000000000' : '0',
         last_error: null,
-        health: 'stopped',
+        health: oracleRunning ? 'healthy' : 'stopped',
       },
       meets_requirements: false,
       requirement_issues: ['TEE not available'],
@@ -576,7 +637,7 @@ function handleInvoke(cmd: string, _args: JsonRecord): Promise<JsonValue> {
     case 'get_wallet_info':
       return Promise.resolve(getMockWallet())
     case 'get_balance':
-      return Promise.resolve(getMockBalance())
+      return getRealBalance()
     case 'get_agent_info':
       return Promise.resolve(null)
     case 'check_ban_status':
@@ -603,9 +664,11 @@ function handleInvoke(cmd: string, _args: JsonRecord): Promise<JsonValue> {
       return Promise.reject(`Unknown network: ${network}`)
     }
     case 'import_wallet': {
-      const mnemonic = (_args as { mnemonic?: string }).mnemonic
-      const privateKey = (_args as { private_key?: string }).private_key
-      console.log(`Mock: import_wallet called with ${mnemonic ? 'mnemonic' : 'private_key'}`)
+      // Frontend sends { request: { private_key, mnemonic, password } }
+      const request = (_args as { request?: { mnemonic?: string; private_key?: string } }).request
+      const mnemonic = request?.mnemonic
+      const privateKey = request?.private_key
+      console.log(`Mock: import_wallet called with ${mnemonic ? 'mnemonic' : 'private_key'}: ${privateKey || mnemonic}`)
       // Set mock wallet state and return - include all required fields
       mockWallet = {
         address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
@@ -615,16 +678,57 @@ function handleInvoke(cmd: string, _args: JsonRecord): Promise<JsonValue> {
       }
       return Promise.resolve(mockWallet)
     }
-    case 'start_service':
-    case 'stop_service':
+    case 'start_service': {
+      // Frontend sends { request: { service_id, stake_amount? } } or { service_id }
+      const request = (_args as { request?: { service_id?: string } }).request
+      const serviceId = request?.service_id || (_args as { service_id?: string }).service_id
+      if (serviceId) {
+        enabledServices.add(serviceId)
+        console.log(`Mock: Started service ${serviceId}`)
+        // Return success response
+        return Promise.resolve({ success: true, service_id: serviceId, status: 'running' })
+      }
+      return Promise.resolve({ success: false, error: 'No service_id provided' })
+    }
+    case 'stop_service': {
+      // Frontend sends { request: { service_id } } or { service_id }
+      const request = (_args as { request?: { service_id?: string } }).request
+      const serviceId = request?.service_id || (_args as { service_id?: string }).service_id
+      if (serviceId) {
+        enabledServices.delete(serviceId)
+        console.log(`Mock: Stopped service ${serviceId}`)
+        return Promise.resolve({ success: true, service_id: serviceId, status: 'stopped' })
+      }
+      return Promise.resolve({ success: false, error: 'No service_id provided' })
+    }
+    case 'create_wallet': {
+      // Frontend sends { request: { password } }
+      console.log('Mock: create_wallet called')
+      mockWallet = {
+        address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+        wallet_type: 'embedded',
+        agent_id: null,
+        is_registered: false,
+      }
+      return Promise.resolve(mockWallet)
+    }
+    case 'disconnect_wallet': {
+      console.log('Mock: disconnect_wallet called')
+      mockWallet = null
+      return Promise.resolve({ success: true })
+    }
+    case 'stake': {
+      const request = (_args as { request?: { service_id?: string; amount?: string } }).request
+      console.log(`Mock: stake called for service=${request?.service_id} amount=${request?.amount}`)
+      return Promise.resolve({ success: true, tx_hash: '0x' + '1'.repeat(64) })
+    }
     case 'start_bot':
     case 'stop_bot':
-    case 'stake':
     case 'unstake':
     case 'claim_rewards':
     case 'update_config':
-      console.log(`Mock: ${cmd} called (no-op in dev mode)`)
-      return Promise.resolve(null)
+      console.log(`Mock: ${cmd} called with args:`, JSON.stringify(_args))
+      return Promise.resolve({ success: true })
     default:
       console.warn(`Unknown Tauri command: ${cmd}`)
       return Promise.resolve(null)
