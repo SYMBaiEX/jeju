@@ -358,7 +358,7 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       await withOperationLock(`Stopping ${botId}`, async () => {
-        await invoke('stop_bot', { bot_id: botId })
+        await invoke('stop_bot', { botId })
         await fetchBots()
       })
     },
@@ -417,7 +417,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const claimRewards = useCallback(
     async (serviceId?: string) => {
       await withOperationLock('Claiming rewards', async () => {
-        await invoke('claim_rewards', { service_id: serviceId })
+        await invoke('claim_rewards', { serviceId })
         await fetchStaking()
         await fetchEarnings()
       })

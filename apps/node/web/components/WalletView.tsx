@@ -569,7 +569,7 @@ export function WalletView() {
               onClick={async () => {
                 setLoading(true)
                 setError(null)
-                await invoke('register_agent', { stake_tier: 'small' })
+                await invoke('register_agent', { request: { tokenUri: '', stakeTier: 'small' } })
                 await fetchWallet()
                 setLoading(false)
               }}
@@ -619,8 +619,8 @@ export function WalletView() {
                     return
                   }
                   await invoke('change_wallet_password', {
-                    old_password: oldPwd,
-                    new_password: newPwd,
+                    oldPassword: oldPwd,
+                    newPassword: newPwd,
                   })
                   alert('Password changed.')
                 }}
