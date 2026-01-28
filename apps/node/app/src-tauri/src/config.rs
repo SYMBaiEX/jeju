@@ -59,13 +59,13 @@ pub struct ContractsConfig {
 
 impl ContractsConfig {
     /// Default addresses for localnet (chain ID 31337)
-    /// These match packages/config/contracts.json
+    /// These match packages/config/contracts.json after bootstrap
     pub fn localnet() -> Self {
         Self {
-            node_staking_manager: "0xc5a5C42992dECbae36851359345FE25997F5C42d".to_string(),
-            identity_registry: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9".to_string(),
-            ban_manager: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0".to_string(),
-            jeju_token: "0x0B306BF915C4d645ff596e518fAf3F9669b97016".to_string(),
+            node_staking_manager: "0x67d269191c92Caf3cD7723F116c85e6E9bf55933".to_string(),
+            identity_registry: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707".to_string(),
+            ban_manager: "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82".to_string(),
+            jeju_token: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1".to_string(),
         }
     }
 
