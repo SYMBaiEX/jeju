@@ -324,7 +324,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
       await withOperationLock(`Stopping ${serviceId}`, async () => {
         console.log(`[stopService] Invoking stop_service for: "${serviceId}"`)
-        await invoke('stop_service', { service_id: serviceId })
+        await invoke('stop_service', { serviceId })
         console.log(`[stopService] stop_service completed, fetching services...`)
         await fetchServices()
       })
