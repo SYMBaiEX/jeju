@@ -116,6 +116,27 @@ pub async fn start_service(
     // Parse service ID
     let service_id: ServiceId = request.service_id.parse()?;
 
+    // For compute service, extract values needed for configuration before modifying config
+    let (dws_url, wallet_address) = if service_id == ServiceId::Compute {
+        // Determine DWS URL based on network
+        let dws = match inner.config.network.network.as_str() {
+            "mainnet" => "https://dws.jejunetwork.org/compute",
+            "testnet" => "https://dws.testnet.jejunetwork.org/compute",
+            "localnet" => "http://127.0.0.1:4030/compute",
+            _ => "https://dws.testnet.jejunetwork.org/compute",
+        }.to_string();
+
+        // Get wallet address if available
+        let wallet = inner.wallet_manager
+            .as_ref()
+            .and_then(|wm| wm.get_info())
+            .map(|info| info.address);
+
+        (Some(dws), wallet)
+    } else {
+        (None, None)
+    };
+
     // Get or create service config
     let config = inner
         .config
@@ -128,6 +149,49 @@ pub async fn start_service(
 
     if let Some(settings) = request.custom_settings {
         config.custom_settings = settings;
+    }
+
+    // For compute service, inject DWS URL and wallet address
+    if service_id == ServiceId::Compute {
+        if let Some(dws) = &dws_url {
+            config.custom_settings.insert(
+                "dws_url".to_string(),
+                serde_json::Value::String(dws.clone()),
+            );
+        }
+
+        if let Some(wallet) = &wallet_address {
+            config.custom_settings.insert(
+                "wallet_address".to_string(),
+                serde_json::Value::String(wallet.clone()),
+            );
+        }
+
+        // Default Ollama endpoint - use public IP so DWS can reach it
+        // In production, this should be the node's public IP or configured via settings
+        if !config.custom_settings.contains_key("ollama_endpoint") {
+            // Try to get public IP from environment or use default
+            let ollama_host = std::env::var("OLLAMA_HOST")
+                .unwrap_or_else(|_| "http://192.9.153.231:11434".to_string());
+            config.custom_settings.insert(
+                "ollama_endpoint".to_string(),
+                serde_json::Value::String(ollama_host),
+            );
+        }
+
+        // Default models
+        if !config.custom_settings.contains_key("models") {
+            config.custom_settings.insert(
+                "models".to_string(),
+                serde_json::json!(["tinyllama"]),
+            );
+        }
+
+        tracing::info!(
+            "Starting compute service with DWS URL: {:?}, wallet: {:?}",
+            dws_url,
+            wallet_address
+        );
     }
 
     // Clone config for service start before saving
