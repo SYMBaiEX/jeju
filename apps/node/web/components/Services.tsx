@@ -553,7 +553,10 @@ export function Services() {
           {/* Start/Stop Button */}
           <button
             type="button"
-            onClick={() => handleToggleService(computeService)}
+            onClick={() => {
+              alert('Button clicked! Service running: ' + computeService.status.running)
+              handleToggleService(computeService)
+            }}
             disabled={
               !computeService.meets_requirements &&
               !computeService.status.running
