@@ -301,7 +301,7 @@ impl HardwareDetector {
     }
 
     fn detect_tee(&self) -> TeeCapabilities {
-        let caps = TeeCapabilities {
+        let mut caps = TeeCapabilities {
             has_intel_tdx: false,
             has_intel_sgx: false,
             has_amd_sev: false,
