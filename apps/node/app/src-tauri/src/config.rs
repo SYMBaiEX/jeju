@@ -55,7 +55,12 @@ pub struct ContractsConfig {
     pub identity_registry: String,
     pub ban_manager: String,
     pub jeju_token: String,
+    #[serde(default = "default_compute_staking")]
     pub compute_staking: String,
+}
+
+fn default_compute_staking() -> String {
+    "0x7bdd3b028C4796eF0EAf07d11394d0d9d8c24139".to_string()
 }
 
 impl ContractsConfig {
