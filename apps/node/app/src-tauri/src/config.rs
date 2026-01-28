@@ -48,6 +48,52 @@ impl Default for BotConfig {
     }
 }
 
+/// Contract addresses configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContractsConfig {
+    pub node_staking_manager: String,
+    pub identity_registry: String,
+    pub ban_manager: String,
+    pub jeju_token: String,
+}
+
+impl ContractsConfig {
+    /// Default addresses for localnet (chain ID 31337)
+    /// These match packages/config/contracts.json
+    pub fn localnet() -> Self {
+        Self {
+            node_staking_manager: "0xc5a5C42992dECbae36851359345FE25997F5C42d".to_string(),
+            identity_registry: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9".to_string(),
+            ban_manager: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0".to_string(),
+            jeju_token: "0x0B306BF915C4d645ff596e518fAf3F9669b97016".to_string(),
+        }
+    }
+
+    /// Default addresses for mainnet (chain ID 420690)
+    pub fn mainnet() -> Self {
+        Self {
+            node_staking_manager: "0x0000000000000000000000000000000000000000".to_string(),
+            identity_registry: "0x0000000000000000000000000000000000000000".to_string(),
+            ban_manager: "0x0000000000000000000000000000000000000000".to_string(),
+            jeju_token: "0x0000000000000000000000000000000000000000".to_string(),
+        }
+    }
+
+    /// Get default addresses for a chain ID
+    pub fn for_chain(chain_id: u64) -> Self {
+        match chain_id {
+            31337 => Self::localnet(),
+            _ => Self::mainnet(),
+        }
+    }
+}
+
+impl Default for ContractsConfig {
+    fn default() -> Self {
+        Self::mainnet()
+    }
+}
+
 /// Network configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
@@ -56,6 +102,8 @@ pub struct NetworkConfig {
     pub rpc_url: String,
     pub ws_url: Option<String>,
     pub explorer_url: String,
+    #[serde(default)]
+    pub contracts: ContractsConfig,
 }
 
 impl Default for NetworkConfig {
@@ -66,6 +114,7 @@ impl Default for NetworkConfig {
             rpc_url: "https://rpc.jejunetwork.org".to_string(),
             ws_url: Some("wss://ws.jejunetwork.org".to_string()),
             explorer_url: "https://explorer.jejunetwork.org".to_string(),
+            contracts: ContractsConfig::mainnet(),
         }
     }
 }

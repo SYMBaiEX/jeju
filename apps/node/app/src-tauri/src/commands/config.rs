@@ -157,6 +157,7 @@ pub async fn set_network(
             rpc_url: "https://rpc.jejunetwork.org".to_string(),
             ws_url: Some("wss://ws.jejunetwork.org".to_string()),
             explorer_url: "https://explorer.jejunetwork.org".to_string(),
+            contracts: crate::config::ContractsConfig::mainnet(),
         },
         "testnet" => NetworkConfig {
             network: "testnet".to_string(),
@@ -164,6 +165,7 @@ pub async fn set_network(
             rpc_url: "https://testnet-rpc.jejunetwork.org".to_string(),
             ws_url: Some("wss://testnet-ws.jejunetwork.org".to_string()),
             explorer_url: "https://testnet-explorer.jejunetwork.org".to_string(),
+            contracts: crate::config::ContractsConfig::mainnet(), // TODO: update when testnet deployed
         },
         "localnet" => NetworkConfig {
             network: "localnet".to_string(),
@@ -171,6 +173,7 @@ pub async fn set_network(
             rpc_url: "http://localhost:6546".to_string(),
             ws_url: Some("ws://localhost:6547".to_string()),
             explorer_url: "http://localhost:4000".to_string(),
+            contracts: crate::config::ContractsConfig::localnet(),
         },
         _ => return Err(format!("Unknown network: {}", network)),
     };
