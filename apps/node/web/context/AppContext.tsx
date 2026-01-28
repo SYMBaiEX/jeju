@@ -265,9 +265,21 @@ export function AppProvider({ children }: AppProviderProps) {
   }, [])
 
   const fetchServices = useCallback(async () => {
-    const raw = await invoke('get_available_services')
-    const services = validateServiceWithStatusArray(raw)
-    dispatch({ type: 'SET_SERVICES', payload: services })
+    console.log('[JejuNode] fetchServices called')
+    try {
+      const raw = await invoke('get_available_services')
+      console.log('[JejuNode] Raw services response:', raw)
+      // Store raw response for debugging
+      ;(window as any).__JEJU_RAW_SERVICES__ = raw
+      const services = validateServiceWithStatusArray(raw)
+      console.log('[JejuNode] Validated services count:', services.length)
+      dispatch({ type: 'SET_SERVICES', payload: services })
+    } catch (err: any) {
+      console.error('[JejuNode] fetchServices error:', err)
+      // Store error for debugging
+      ;(window as any).__JEJU_SERVICES_ERROR__ = err?.message || String(err)
+      dispatch({ type: 'SET_ERROR', payload: `Services error: ${err?.message || err}` })
+    }
   }, [])
 
   const startService = useCallback(
@@ -307,7 +319,7 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       await withOperationLock(`Stopping ${serviceId}`, async () => {
-        await invoke('stop_service', { service_id: serviceId })
+        await invoke('stop_service', { serviceId })
         await fetchServices()
       })
     },
@@ -448,14 +460,23 @@ export function AppProvider({ children }: AppProviderProps) {
   }, [])
 
   const initialize = useCallback(async () => {
-    if (initializingRef.current) return
+    console.log('[JejuNode] initialize() called')
+    if (initializingRef.current) {
+      console.log('[JejuNode] Already initializing, skipping')
+      return
+    }
     initializingRef.current = true
 
     try {
+      console.log('[JejuNode] Starting initialization with operation lock')
       await withOperationLock('Initializing', async () => {
+        console.log('[JejuNode] Fetching hardware...')
         await fetchHardware()
+        console.log('[JejuNode] Fetching config...')
         await fetchConfig()
+        console.log('[JejuNode] Fetching wallet...')
         await fetchWallet()
+        console.log('[JejuNode] Fetching services...')
         await fetchServices()
         await fetchBots()
         await fetchProjectedEarnings()

@@ -178,7 +178,7 @@ export const ServiceMetadataSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
-  min_stake_eth: PositiveNumberSchema,
+  min_stake_eth: NonNegativeNumberSchema, // Allow 0 for services that don't require staking
   estimated_earnings_per_hour_usd: NonNegativeNumberSchema,
   requirements: ServiceRequirementsSchema,
   warnings: z.array(z.string()),

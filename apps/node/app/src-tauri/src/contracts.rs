@@ -102,48 +102,53 @@ pub struct ContractAddresses {
 }
 
 impl ContractAddresses {
+    /// Create from config
+    pub fn from_config(config: &crate::config::ContractsConfig) -> Result<Self, String> {
+        Ok(Self {
+            node_staking_manager: Address::from_str(&config.node_staking_manager)
+                .map_err(|e| format!("Invalid node_staking_manager address: {}", e))?,
+            identity_registry: Address::from_str(&config.identity_registry)
+                .map_err(|e| format!("Invalid identity_registry address: {}", e))?,
+            ban_manager: Address::from_str(&config.ban_manager)
+                .map_err(|e| format!("Invalid ban_manager address: {}", e))?,
+            jeju_token: Address::from_str(&config.jeju_token)
+                .map_err(|e| format!("Invalid jeju_token address: {}", e))?,
+        })
+    }
+
     /// Get contract addresses for localnet (chainId 31337)
+    /// These must match packages/config/contracts.json
     pub fn localnet() -> Self {
-        Self {
-            // These addresses are set during local deployment
-            // They should be loaded from environment or config in production
-            node_staking_manager: Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3")
-                .expect("valid address"),
-            identity_registry: Address::from_str("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512")
-                .expect("valid address"),
-            ban_manager: Address::from_str("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0")
-                .expect("valid address"),
-            jeju_token: Address::from_str("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9")
-                .expect("valid address"),
-        }
+        Self::from_config(&crate::config::ContractsConfig::localnet())
+            .expect("valid localnet addresses")
     }
 
-    /// Get contract addresses for Base Sepolia testnet (chainId 84532)
-    pub fn base_sepolia() -> Self {
-        Self {
-            node_staking_manager: Address::from_str("0x0000000000000000000000000000000000000000")
-                .expect("valid address"),
-            identity_registry: Address::from_str("0x0000000000000000000000000000000000000000")
-                .expect("valid address"),
-            ban_manager: Address::from_str("0x0000000000000000000000000000000000000000")
-                .expect("valid address"),
-            jeju_token: Address::from_str("0x0000000000000000000000000000000000000000")
-                .expect("valid address"),
-        }
-    }
-
-    /// Get contract addresses based on chain ID
+    /// Get contract addresses based on chain ID (fallback if no config provided)
     pub fn for_chain(chain_id: u64) -> Self {
-        match chain_id {
-            31337 => Self::localnet(),
-            84532 => Self::base_sepolia(),
-            _ => Self::localnet(), // Default to localnet
-        }
+        Self::from_config(&crate::config::ContractsConfig::for_chain(chain_id))
+            .expect("valid addresses for chain")
     }
 }
 
 impl ContractClient {
-    /// Create a new contract client
+    /// Create a new contract client with config
+    pub async fn new_with_config(
+        rpc_url: &str,
+        contracts_config: &crate::config::ContractsConfig,
+    ) -> Result<Self, String> {
+        let provider = ProviderBuilder::new().on_http(
+            rpc_url
+                .parse()
+                .map_err(|e| format!("Invalid RPC URL: {}", e))?,
+        );
+
+        Ok(Self {
+            provider: Arc::new(provider),
+            addresses: ContractAddresses::from_config(contracts_config)?,
+        })
+    }
+
+    /// Create a new contract client (legacy, uses chain_id to determine addresses)
     pub async fn new(rpc_url: &str, chain_id: u64) -> Result<Self, String> {
         let provider = ProviderBuilder::new().on_http(
             rpc_url

@@ -41,12 +41,13 @@ pub async fn create_wallet(
 
     let rpc_url = inner.config.network.rpc_url.clone();
     let chain_id = inner.config.network.chain_id;
+    let contracts_config = inner.config.network.contracts.clone();
 
     let mut manager = WalletManager::new(&rpc_url, chain_id);
     let info = manager.create_wallet(&request.password)?;
 
-    // Initialize contract client
-    let contract_client = ContractClient::new(&rpc_url, chain_id)
+    // Initialize contract client with config addresses
+    let contract_client = ContractClient::new_with_config(&rpc_url, &contracts_config)
         .await
         .map_err(|e| format!("Failed to create contract client: {}", e))?;
 
@@ -70,6 +71,7 @@ pub async fn import_wallet(
 
     let rpc_url = inner.config.network.rpc_url.clone();
     let chain_id = inner.config.network.chain_id;
+    let contracts_config = inner.config.network.contracts.clone();
 
     let mut manager = WalletManager::new(&rpc_url, chain_id);
 
@@ -81,8 +83,8 @@ pub async fn import_wallet(
         return Err("Either private_key or mnemonic required".to_string());
     };
 
-    // Initialize contract client
-    let contract_client = ContractClient::new(&rpc_url, chain_id)
+    // Initialize contract client with config addresses
+    let contract_client = ContractClient::new_with_config(&rpc_url, &contracts_config)
         .await
         .map_err(|e| format!("Failed to create contract client: {}", e))?;
 
