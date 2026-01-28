@@ -181,7 +181,7 @@ impl HardwareDetector {
     }
 
     fn detect_gpus(&self) -> Vec<GpuInfo> {
-        let gpus = Vec::new();
+        let mut gpus = Vec::new();
 
         #[cfg(feature = "nvidia")]
         {
