@@ -1,6 +1,7 @@
 //! Configuration management commands
 
 use crate::config::{BotConfig, EarningsConfig, NetworkConfig, ServiceConfig};
+use crate::contracts::ContractClient;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -187,6 +188,28 @@ pub async fn set_network(
         .service_manager
         .initialize(&config_clone)
         .map_err(|e| e.to_string())?;
+
+    // Update wallet manager with new network settings (if it exists)
+    if let Some(ref mut wallet_manager) = inner.wallet_manager {
+        wallet_manager.update_network(&network_config.rpc_url, network_config.chain_id);
+        tracing::info!(
+            "Updated wallet manager to use RPC: {}",
+            network_config.rpc_url
+        );
+    }
+
+    // Recreate contract client with new network settings
+    let contract_client = ContractClient::new_with_config(
+        &network_config.rpc_url,
+        &network_config.contracts,
+    )
+    .await
+    .map_err(|e| format!("Failed to create contract client: {}", e))?;
+    inner.contract_client = Some(contract_client);
+    tracing::info!(
+        "Recreated contract client for network: {}",
+        network_config.network
+    );
 
     Ok(network_config)
 }
