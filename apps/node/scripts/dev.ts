@@ -63,7 +63,7 @@ async function buildFrontend(): Promise<boolean> {
             () => ({
               contents: `
               // Browser mock for Tauri invoke
-              const API_URL = '';
+              const API_URL = 'http://localhost:1421';
 
               export async function invoke(cmd, args = {}) {
                 const response = await fetch(\`\${API_URL}/invoke/\${cmd}\`, {
@@ -86,6 +86,8 @@ async function buildFrontend(): Promise<boolean> {
     ],
     define: {
       'process.env.NODE_ENV': JSON.stringify('development'),
+      'process.env': JSON.stringify({ NODE_ENV: 'development' }),
+      'process': JSON.stringify({ env: { NODE_ENV: 'development' } }),
     },
   })
 
@@ -161,6 +163,9 @@ async function createIndexHtml(): Promise<string> {
 // Import mock data handlers
 import { convertHardwareToSnakeCase, detectHardware } from '../api/lib/hardware'
 
+// Mock wallet state
+let mockWallet: { address: string; wallet_type: string; agent_id: number | null; is_registered: boolean } | null = null
+
 // Mock data for development
 function getMockHardware() {
   const rawHardware = detectHardware()
@@ -168,7 +173,7 @@ function getMockHardware() {
 }
 
 function getMockWallet() {
-  return null // No wallet in dev mode by default
+  return mockWallet
 }
 
 function getMockBalance() {
@@ -457,16 +462,43 @@ function getMockProjectedEarnings() {
   }
 }
 
+// Mutable state for mock
+let currentNetwork = {
+  network: 'localnet',
+  chain_id: 31337,
+  rpc_url: 'http://localhost:6546',
+  ws_url: 'ws://localhost:6547',
+  explorer_url: 'http://localhost:4000',
+}
+
+const NETWORKS: Record<string, typeof currentNetwork> = {
+  localnet: {
+    network: 'localnet',
+    chain_id: 31337,
+    rpc_url: 'http://localhost:6546',
+    ws_url: 'ws://localhost:6547',
+    explorer_url: 'http://localhost:4000',
+  },
+  testnet: {
+    network: 'testnet',
+    chain_id: 420691,
+    rpc_url: 'https://testnet-rpc.jejunetwork.org',
+    ws_url: 'wss://testnet-ws.jejunetwork.org',
+    explorer_url: 'https://testnet.jejuscan.io',
+  },
+  mainnet: {
+    network: 'mainnet',
+    chain_id: 420690,
+    rpc_url: 'https://rpc.jejunetwork.org',
+    ws_url: 'wss://ws.jejunetwork.org',
+    explorer_url: 'https://jejuscan.io',
+  },
+}
+
 function getMockConfig() {
   return {
     version: '1.0.0',
-    network: {
-      network: 'testnet',
-      chain_id: 420691,
-      rpc_url: 'https://testnet-rpc.jejunetwork.org',
-      ws_url: 'wss://testnet-ws.jejunetwork.org',
-      explorer_url: 'https://testnet.jejuscan.io',
-    },
+    network: currentNetwork,
     wallet: {
       wallet_type: 'embedded',
       address: null,
@@ -561,6 +593,28 @@ function handleInvoke(cmd: string, _args: JsonRecord): Promise<JsonValue> {
       return Promise.resolve(getMockStaking())
     case 'get_config':
       return Promise.resolve(getMockConfig())
+    case 'set_network': {
+      const network = (_args as { network?: string }).network
+      if (network && NETWORKS[network]) {
+        currentNetwork = NETWORKS[network]
+        console.log(`Mock: Switched to network ${network}`)
+        return Promise.resolve(currentNetwork)
+      }
+      return Promise.reject(`Unknown network: ${network}`)
+    }
+    case 'import_wallet': {
+      const mnemonic = (_args as { mnemonic?: string }).mnemonic
+      const privateKey = (_args as { private_key?: string }).private_key
+      console.log(`Mock: import_wallet called with ${mnemonic ? 'mnemonic' : 'private_key'}`)
+      // Set mock wallet state and return - include all required fields
+      mockWallet = {
+        address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+        wallet_type: 'embedded',
+        agent_id: null,
+        is_registered: false,
+      }
+      return Promise.resolve(mockWallet)
+    }
     case 'start_service':
     case 'stop_service':
     case 'start_bot':
@@ -569,7 +623,6 @@ function handleInvoke(cmd: string, _args: JsonRecord): Promise<JsonValue> {
     case 'unstake':
     case 'claim_rewards':
     case 'update_config':
-    case 'set_network':
       console.log(`Mock: ${cmd} called (no-op in dev mode)`)
       return Promise.resolve(null)
     default:
