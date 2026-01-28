@@ -82,20 +82,22 @@ export function Services() {
   }
 
   const handleToggleService = async (service: ServiceWithStatus) => {
-    alert('handleToggleService called, wallet=' + (wallet ? 'yes' : 'no'))
     if (!wallet) {
-      alert('No wallet!')
+      alert('Please connect a wallet first')
       return
     }
 
     if (service.status.running) {
-      alert('About to call stopService for: ' + service.metadata.id)
-      try {
-        await stopService(service.metadata.id)
-        alert('stopService completed successfully!')
-      } catch (err: any) {
-        alert('stopService ERROR: ' + JSON.stringify(err))
+      if (service.metadata.id === 'sequencer') {
+        if (
+          !confirm(
+            'Stopping the sequencer may result in missed blocks and slashing. Are you sure?',
+          )
+        ) {
+          return
+        }
       }
+      await stopService(service.metadata.id)
     } else {
       if (service.metadata.id === 'sequencer') {
         setConfirmingSequencer(true)
@@ -145,22 +147,8 @@ export function Services() {
   const computeService = services.find((s) => s.metadata.id === 'compute')
   const otherServices = services.filter((s) => s.metadata.id !== 'compute')
 
-  // Debug: log services
   return (
     <div className="space-y-6">
-      {/* Debug Info */}
-      <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded-lg space-y-2">
-        <p className="text-yellow-400 text-sm">
-          DEBUG v2: {services.length} services. Compute: {computeService ? 'YES' : 'NO'}. IDs: {services.map(s => s.metadata.id).join(', ') || 'none'}
-        </p>
-        <p className="text-red-400 text-sm">
-          Error state: {error || 'none'}
-        </p>
-        <p className="text-green-400 text-sm">
-          Hardware: {hardware ? `${hardware.cpu.cores_physical} cores` : 'loading'}
-        </p>
-      </div>
-
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Services</h1>
@@ -546,10 +534,7 @@ export function Services() {
           {/* Start/Stop Button */}
           <button
             type="button"
-            onClick={() => {
-              alert('Button clicked! Service running: ' + computeService.status.running)
-              handleToggleService(computeService)
-            }}
+            onClick={() => handleToggleService(computeService)}
             disabled={
               !computeService.meets_requirements &&
               !computeService.status.running
