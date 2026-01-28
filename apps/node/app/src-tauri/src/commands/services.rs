@@ -50,10 +50,10 @@ pub async fn get_available_services(
             // Check requirements - use lower thresholds for basic services
             let reqs = match service_id {
                 ServiceId::Compute => crate::hardware::ServiceRequirements {
-                    min_cpu_cores: 2,
-                    min_memory_mb: 4 * 1024,
+                    min_cpu_cores: 1,
+                    min_memory_mb: 24 * 1024, // 24 GB for testing
                     min_storage_gb: 50,
-                    requires_gpu: false, // GPU is optional, not required
+                    requires_gpu: false,
                     min_gpu_memory_mb: None,
                     requires_tee: false,
                     min_bandwidth_mbps: Some(10),
