@@ -27,14 +27,17 @@ pub struct ServiceWithStatus {
 pub async fn get_available_services(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServiceWithStatus>, String> {
+    tracing::info!("get_available_services called");
     let inner = state.inner.read().await;
 
     // Detect current hardware
     let mut detector = HardwareDetector::new();
     let hardware = detector.detect();
+    tracing::info!("Hardware detected: {} cores, {} MB RAM", hardware.cpu.cores_physical, hardware.memory.total_mb);
 
     // Get all service statuses at once
     let all_statuses = inner.service_manager.get_all_status().await;
+    tracing::info!("Got {} service statuses", all_statuses.len());
 
     // Get all services with their metadata and requirements
     let services: Vec<ServiceWithStatus> = inner
@@ -99,6 +102,7 @@ pub async fn get_available_services(
         })
         .collect();
 
+    tracing::info!("Returning {} services: {:?}", services.len(), services.iter().map(|s| &s.metadata.id).collect::<Vec<_>>());
     Ok(services)
 }
 

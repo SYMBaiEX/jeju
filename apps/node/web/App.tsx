@@ -22,7 +22,10 @@ export function App() {
     initialize,
   } = useAppStore()
 
+  console.log('[JejuNode] App rendering, currentView:', currentView, 'isLoading:', isLoading)
+
   useEffect(() => {
+    console.log('[JejuNode] App useEffect - calling initialize()')
     initialize()
   }, [initialize])
 

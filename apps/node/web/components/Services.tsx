@@ -53,7 +53,7 @@ const serviceIcons: Record<string, React.ReactNode> = {
 }
 
 export function Services() {
-  const { services, startService, stopService, hardware, wallet, isLoading } =
+  const { services, startService, stopService, hardware, wallet, isLoading, error } =
     useAppStore()
   const [expandedService, setExpandedService] = useState<string | null>(null)
   const [confirmingSequencer, setConfirmingSequencer] = useState(false)
@@ -147,8 +147,22 @@ export function Services() {
   const computeService = services.find((s) => s.metadata.id === 'compute')
   const otherServices = services.filter((s) => s.metadata.id !== 'compute')
 
+  // Debug: log services
   return (
     <div className="space-y-6">
+      {/* Debug Info */}
+      <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded-lg space-y-2">
+        <p className="text-yellow-400 text-sm">
+          DEBUG v2: {services.length} services. Compute: {computeService ? 'YES' : 'NO'}. IDs: {services.map(s => s.metadata.id).join(', ') || 'none'}
+        </p>
+        <p className="text-red-400 text-sm">
+          Error state: {error || 'none'}
+        </p>
+        <p className="text-green-400 text-sm">
+          Hardware: {hardware ? `${hardware.cpu.cores_physical} cores` : 'loading'}
+        </p>
+      </div>
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Services</h1>
