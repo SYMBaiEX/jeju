@@ -260,9 +260,9 @@ pub async fn unstake(
         .map_err(|e| format!("Invalid amount: {}", e))?;
 
     // Call startUnbonding(uint256 amount) on the staking contract
-    // This starts the 7-day unbonding period
+    // This starts the 14-day unbonding period
     let unbond_data = {
-        let mut data = vec![0x5a, 0xf0, 0x61, 0x86]; // startUnbonding(uint256) selector
+        let mut data = vec![0xa8, 0x19, 0x48, 0x44]; // startUnbonding(uint256) selector
         data.extend_from_slice(&amount.to_be_bytes::<32>());
         hex::encode(&data)
     };
