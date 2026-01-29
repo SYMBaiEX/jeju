@@ -21,7 +21,6 @@ import {
   Zap,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { listen } from '@tauri-apps/api/event'
 import type { ServiceWithStatus } from '../../lib/types'
 import { useAppStore } from '../context/AppContext'
 import { formatEther } from '../utils'
@@ -54,7 +53,7 @@ const serviceIcons: Record<string, React.ReactNode> = {
 }
 
 export function Services() {
-  const { services, startService, stopService, hardware, wallet, isLoading, error } =
+  const { services, startService, stopService, hardware, wallet, isLoading, error, fetchServices } =
     useAppStore()
   const [expandedService, setExpandedService] = useState<string | null>(null)
   const [confirmingSequencer, setConfirmingSequencer] = useState(false)
@@ -69,30 +68,39 @@ export function Services() {
     pricePerHour: '0.01',
   })
 
-  // Listen for real-time service status changes
+  // Listen for real-time service status changes using window.__TAURI__ directly
+  // This avoids tree-shaking issues with the @tauri-apps/api import
   useEffect(() => {
-    let unlisten: () => void
+    let unlisten: (() => void) | undefined
 
-    const setupEventListener = async () => {
+    const setupListener = async () => {
+      // Access Tauri event API via global object (withGlobalTauri: true in tauri.conf.json)
+      const tauri = (window as any).__TAURI__
+      if (!tauri?.event?.listen) {
+        console.warn('Tauri event API not available')
+        return
+      }
+
       try {
-        unlisten = await listen('service-status-changed', (event) => {
-          console.log('Service status changed:', event.payload)
-          // Force a refresh of services data to get the latest status
-          // The useAppStore hook should trigger a re-render when services data updates
+        unlisten = await tauri.event.listen('service-status-changed', (event: any) => {
+          console.log('Service status changed event received:', event.payload)
+          // Refresh services to get latest status
+          fetchServices().catch((err: Error) => console.error('Failed to fetch services:', err))
         })
-      } catch (error) {
-        console.error('Failed to set up service status event listener:', error)
+        console.log('Service status event listener registered successfully')
+      } catch (err) {
+        console.error('Failed to register service status listener:', err)
       }
     }
 
-    setupEventListener()
+    setupListener()
 
     return () => {
       if (unlisten) {
         unlisten()
       }
     }
-  }, [])
+  }, [fetchServices])
 
   const hasCpuTee =
     hardware?.tee.attestation_available &&
