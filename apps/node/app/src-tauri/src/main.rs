@@ -31,7 +31,13 @@ fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting Jeju Node v{}", env!("CARGO_PKG_VERSION"));
+    // Build timestamp is set at compile time
+    const BUILD_TIMESTAMP: &str = env!("BUILD_TIMESTAMP");
+    tracing::info!(
+        "Starting Jeju Node v{} (build: {})",
+        env!("CARGO_PKG_VERSION"),
+        BUILD_TIMESTAMP
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

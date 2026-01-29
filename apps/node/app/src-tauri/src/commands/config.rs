@@ -8,8 +8,16 @@ use std::collections::HashMap;
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildInfo {
+    pub version: String,
+    pub build_timestamp: u64,
+    pub build_date: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: String,
+    pub build_info: BuildInfo,
     pub network: NetworkConfig,
     pub wallet: WalletConfigPublic,
     pub earnings: EarningsConfig,
@@ -59,8 +67,19 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
         crate::config::WalletType::JejuWallet => "jeju_wallet",
     };
 
+    // Get build timestamp from compile-time env var
+    let build_timestamp: u64 = env!("BUILD_TIMESTAMP").parse().unwrap_or(0);
+    let build_date = chrono::DateTime::from_timestamp(build_timestamp as i64, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
     Ok(AppConfig {
         version: inner.config.version.clone(),
+        build_info: BuildInfo {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            build_timestamp,
+            build_date,
+        },
         network: inner.config.network.clone(),
         wallet: WalletConfigPublic {
             wallet_type: wallet_type.to_string(),
@@ -121,8 +140,18 @@ pub async fn update_config(
         crate::config::WalletType::JejuWallet => "jeju_wallet",
     };
 
+    let build_timestamp: u64 = env!("BUILD_TIMESTAMP").parse().unwrap_or(0);
+    let build_date = chrono::DateTime::from_timestamp(build_timestamp as i64, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
     Ok(AppConfig {
         version: inner.config.version.clone(),
+        build_info: BuildInfo {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            build_timestamp,
+            build_date,
+        },
         network: inner.config.network.clone(),
         wallet: WalletConfigPublic {
             wallet_type: wallet_type.to_string(),
