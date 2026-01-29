@@ -101,11 +101,15 @@ pub async fn import_wallet(
 
 #[tauri::command]
 pub async fn get_wallet_info(state: State<'_, AppState>) -> Result<Option<WalletInfo>, String> {
+    tracing::info!("get_wallet_info called");
     let inner = state.inner.read().await;
 
     if let Some(ref manager) = inner.wallet_manager {
-        Ok(manager.get_info())
+        let info = manager.get_info();
+        tracing::info!("Wallet info: {:?}", info.as_ref().map(|i| &i.address));
+        Ok(info)
     } else {
+        tracing::info!("No wallet manager");
         Ok(None)
     }
 }
