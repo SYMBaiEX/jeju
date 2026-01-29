@@ -16,6 +16,10 @@ export function Settings() {
   const { config, updateConfig, setNetwork, hardware } = useAppStore()
   const [error, setError] = useState<string | null>(null)
 
+  // Debug: log config to see what we're getting
+  console.log('[Settings] config:', JSON.stringify(config, null, 2))
+  console.log('[Settings] build_info:', config?.build_info)
+
   const [localConfig, setLocalConfig] = useState({
     start_minimized: config?.start_minimized ?? false,
     start_on_boot: config?.start_on_boot ?? false,
@@ -465,6 +469,13 @@ export function Settings() {
           <div className="flex justify-between">
             <span className="text-volcanic-400">Build Date</span>
             <span className="font-mono text-xs">{config?.build_info?.build_date ?? 'unknown'}</span>
+          </div>
+          {/* Debug: show raw build_info */}
+          <div className="mt-2 p-2 bg-volcanic-800 rounded text-xs">
+            <span className="text-volcanic-500">Debug: </span>
+            <span className="text-yellow-400 font-mono">
+              {config ? (config.build_info ? JSON.stringify(config.build_info) : 'build_info is undefined') : 'config is null'}
+            </span>
           </div>
         </div>
       </div>
