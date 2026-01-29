@@ -73,6 +73,13 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
+    tracing::info!(
+        "get_config: build_info={{ version: {}, timestamp: {}, date: {} }}",
+        env!("CARGO_PKG_VERSION"),
+        build_timestamp,
+        build_date
+    );
+
     Ok(AppConfig {
         version: inner.config.version.clone(),
         build_info: BuildInfo {
