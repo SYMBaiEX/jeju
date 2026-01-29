@@ -184,6 +184,7 @@ impl Service for SequencerService {
             } else {
                 "stopped".to_string()
             },
+            registration_status: None,
         }
     }
 

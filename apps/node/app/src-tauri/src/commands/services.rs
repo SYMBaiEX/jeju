@@ -91,6 +91,7 @@ pub async fn get_available_services(
                     earnings_wei: "0".to_string(),
                     last_error: None,
                     health: "stopped".to_string(),
+                    registration_status: None,
                 });
 
             ServiceWithStatus {

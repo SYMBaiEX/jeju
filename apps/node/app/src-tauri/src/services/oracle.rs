@@ -161,6 +161,7 @@ impl Service for OracleService {
             } else {
                 "stopped".to_string()
             },
+            registration_status: None,
         }
     }
 

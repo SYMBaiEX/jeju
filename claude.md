@@ -118,7 +118,21 @@ All services reading contract addresses may need restart to use new deployed con
   - MultiServiceStakeManager
   - ServiceStaking (newer per-service variant)
 
-### Current Focus: Staking System
+### Current Focus: Enhanced Service Status Tracking ✅ COMPLETED
+- **Issue:** UI showed "running" immediately when service started, before DWS registration completed
+- **Solution:** Enhanced status tracking with registration lifecycle states
+- **Implementation:**
+  - Added `RegistrationStatus` enum: `Idle`, `Pending`, `Registered`, `Failed`
+  - Updated `ServiceState` with `registration_status` field
+  - Enhanced `ComputeService` to track DWS registration process
+  - UI now shows: "Registering..." (yellow pulse) → "Registered" (green) or "Registration Failed" (red)
+- **Files Modified:**
+  - `apps/node/app/src-tauri/src/services/mod.rs` - Added RegistrationStatus enum
+  - `apps/node/app/src-tauri/src/services/compute.rs` - Enhanced lifecycle tracking
+  - `apps/node/web/components/Services.tsx` - Updated UI status indicators
+  - All service files - Added registration_status field
+
+### Previous Work: Staking System
 - **Issue:** UI tracking of individual service stakes for unstaking
 - **Contracts:**
   - `MultiServiceStakeManager.sol` (deployed at `0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E`, tracks totals only)
@@ -155,6 +169,38 @@ All services reading contract addresses may need restart to use new deployed con
 - otto
 - vpn
 - documentation
+
+## Session Management & Context Monitoring
+
+### Automated Context Reminders
+**System**: Reminds you to check context usage every 30 minutes (at :00 and :30)
+
+```bash
+# Setup automatic reminders (add to crontab)
+* * * * * /private/tmp/claude/-Users-admin69-jeju/22873115-7d7f-47c3-954f-10bf243102ce/scratchpad/context_reminder.sh >/dev/null 2>&1
+
+# Check for active reminders manually
+/private/tmp/claude/-Users-admin69-jeju/22873115-7d7f-47c3-954f-10bf243102ce/scratchpad/check_context_reminder.sh
+```
+
+**When reminded**: Run `/context` to see usage percentage and decide if checkpointing is needed.
+
+### Checkpointing System
+**Purpose**: Save session state for smooth handoffs when approaching context limits
+
+```bash
+# Create checkpoint manually
+/private/tmp/claude/-Users-admin69-jeju/22873115-7d7f-47c3-954f-10bf243102ce/scratchpad/checkpoint.sh
+
+# View latest checkpoint
+ls -la /private/tmp/claude/-Users-admin69-jeju/22873115-7d7f-47c3-954f-10bf243102ce/scratchpad/checkpoints/
+```
+
+### Context Guidelines
+- **< 50%**: Continue normally
+- **50-70%**: Monitor closely, check reminders
+- **70-85%**: Consider creating checkpoint
+- **> 85%**: Create checkpoint and prepare handoff
 
 ## Important Paths & Commands
 

@@ -152,6 +152,7 @@ impl Service for XlpService {
             } else {
                 "stopped".to_string()
             },
+            registration_status: None,
         }
     }
 

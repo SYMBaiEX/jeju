@@ -3,7 +3,7 @@
 //! Registers with DWS (Decentralized Web Services) to receive inference requests
 //! and routes them to local Ollama instance.
 
-use super::{Service, ServiceId, ServiceMetadata, ServiceState};
+use super::{Service, ServiceId, ServiceMetadata, ServiceState, RegistrationStatus};
 use crate::config::ServiceConfig;
 use crate::hardware::ServiceRequirements;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,7 @@ pub struct ComputeService {
     ollama_endpoint: Arc<RwLock<String>>,
     models: Arc<RwLock<Vec<String>>>,
     running: Arc<AtomicBool>,
+    registration_status: Arc<RwLock<RegistrationStatus>>,
     start_time: Arc<RwLock<Option<Instant>>>,
     requests_served: Arc<AtomicU64>,
     earnings_wei: Arc<RwLock<String>>,
@@ -67,6 +68,7 @@ impl ComputeService {
             ollama_endpoint: Arc::new(RwLock::new("http://localhost:11434".to_string())),
             models: Arc::new(RwLock::new(vec!["tinyllama".to_string()])),
             running: Arc::new(AtomicBool::new(false)),
+            registration_status: Arc::new(RwLock::new(RegistrationStatus::Idle)),
             start_time: Arc::new(RwLock::new(None)),
             requests_served: Arc::new(AtomicU64::new(0)),
             earnings_wei: Arc::new(RwLock::new("0".to_string())),
@@ -302,18 +304,27 @@ impl Service for ComputeService {
         let (tx, mut rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(tx);
 
-        // Mark as running
+        // Mark as running but pending registration
         self.running.store(true, Ordering::SeqCst);
+        *self.registration_status.write().await = RegistrationStatus::Pending;
         *self.start_time.write().await = Some(Instant::now());
 
         // Register with DWS
-        if let Err(e) = self.register_with_dws().await {
-            tracing::warn!("DWS registration failed (will retry): {}", e);
-            // Don't fail startup, just log the error - we'll retry in the heartbeat loop
+        match self.register_with_dws().await {
+            Ok(()) => {
+                *self.registration_status.write().await = RegistrationStatus::Registered;
+                tracing::info!("Initial DWS registration successful");
+            }
+            Err(e) => {
+                *self.registration_status.write().await = RegistrationStatus::Failed;
+                tracing::warn!("DWS registration failed (will retry): {}", e);
+                // Don't fail startup, just log the error - we'll retry in the heartbeat loop
+            }
         }
 
         // Clone for async task
         let running = self.running.clone();
+        let registration_status = self.registration_status.clone();
         let requests_served = self.requests_served.clone();
         let _earnings_wei = self.earnings_wei.clone();
         let last_error = self.last_error.clone();
@@ -361,14 +372,17 @@ impl Service for ComputeService {
                                 Ok(response) => {
                                     if response.status().is_success() {
                                         tracing::debug!("Heartbeat sent successfully");
+                                        *registration_status.write().await = RegistrationStatus::Registered;
                                         retry_registration = false;
                                     } else {
                                         tracing::warn!("Heartbeat failed: {}, will retry registration", response.status());
+                                        *registration_status.write().await = RegistrationStatus::Failed;
                                         retry_registration = true;
                                     }
                                 }
                                 Err(e) => {
                                     tracing::warn!("Heartbeat error: {}, will retry registration", e);
+                                    *registration_status.write().await = RegistrationStatus::Failed;
                                     retry_registration = true;
                                     *last_error.write().await = Some(format!("Heartbeat error: {}", e));
                                 }
@@ -377,6 +391,7 @@ impl Service for ComputeService {
                             // If heartbeat failed, try to re-register
                             if retry_registration {
                                 tracing::info!("Attempting to re-register with DWS...");
+                                *registration_status.write().await = RegistrationStatus::Pending;
                                 let register_url = format!("{}/nodes/register", dws);
                                 let endpoint = ollama_endpoint.read().await.clone();
                                 let model_list = models.read().await.clone();
@@ -401,6 +416,7 @@ impl Service for ComputeService {
                                 {
                                     if response.status().is_success() {
                                         tracing::info!("Re-registration successful");
+                                        *registration_status.write().await = RegistrationStatus::Registered;
                                         retry_registration = false;
                                     }
                                 }
@@ -437,6 +453,7 @@ impl Service for ComputeService {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         self.running.store(false, Ordering::SeqCst);
+        *self.registration_status.write().await = RegistrationStatus::Idle;
         *self.start_time.write().await = None;
 
         Ok(())
@@ -461,6 +478,7 @@ impl Service for ComputeService {
             } else {
                 "stopped".to_string()
             },
+            registration_status: Some(self.registration_status.read().await.clone()),
         }
     }
 

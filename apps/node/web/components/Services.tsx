@@ -240,8 +240,27 @@ export function Services() {
 
             {computeService.status.running && (
               <div className="flex items-center gap-2">
-                <span className="status-healthy" />
-                <span className="text-sm text-green-400">Running</span>
+                {computeService.status.registration_status === 'pending' ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    <span className="text-sm text-yellow-400">Registering...</span>
+                  </>
+                ) : computeService.status.registration_status === 'registered' ? (
+                  <>
+                    <span className="status-healthy" />
+                    <span className="text-sm text-green-400">Registered</span>
+                  </>
+                ) : computeService.status.registration_status === 'failed' ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                    <span className="text-sm text-red-400">Registration Failed</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="status-healthy" />
+                    <span className="text-sm text-green-400">Running</span>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -620,7 +639,17 @@ export function Services() {
                       </span>
                     )}
                     {service.status.running && (
-                      <span className="status-healthy" />
+                      <>
+                        {service.status.registration_status === 'pending' ? (
+                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                        ) : service.status.registration_status === 'registered' ? (
+                          <span className="status-healthy" />
+                        ) : service.status.registration_status === 'failed' ? (
+                          <div className="w-2 h-2 rounded-full bg-red-400" />
+                        ) : (
+                          <span className="status-healthy" />
+                        )}
+                      </>
                     )}
                   </div>
 

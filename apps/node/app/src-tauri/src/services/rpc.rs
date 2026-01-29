@@ -152,6 +152,7 @@ impl Service for RpcService {
             } else {
                 "stopped".to_string()
             },
+            registration_status: None,
         }
     }
 

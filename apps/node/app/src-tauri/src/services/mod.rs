@@ -89,6 +89,16 @@ pub struct ServiceMetadata {
     pub is_advanced: bool,
 }
 
+/// Registration status for services that register with external systems
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RegistrationStatus {
+    Idle,        // Not started
+    Pending,     // Attempting registration
+    Registered,  // Successfully registered
+    Failed,      // Registration failed
+}
+
 /// Service state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceState {
@@ -98,6 +108,7 @@ pub struct ServiceState {
     pub earnings_wei: String,
     pub last_error: Option<String>,
     pub health: String,
+    pub registration_status: Option<RegistrationStatus>,
 }
 
 /// Service trait
