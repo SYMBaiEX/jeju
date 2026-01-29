@@ -9,7 +9,7 @@ use alloy::transports::http::{Client, Http};
 use std::str::FromStr;
 use std::sync::Arc;
 
-// Generate type-safe bindings for NodeStakingManager
+// Node Staking Manager interface
 sol! {
     #[sol(rpc)]
     interface INodeStakingManager {
@@ -45,7 +45,10 @@ sol! {
         function getPendingRewards(bytes32 nodeId) external view returns (uint256);
         function getTotalStakedUSD() external view returns (uint256);
     }
+}
 
+// ERC20 interface
+sol! {
     #[sol(rpc)]
     interface IERC20 {
         function balanceOf(address account) external view returns (uint256);
@@ -53,25 +56,40 @@ sol! {
         function approve(address spender, uint256 amount) external returns (bool);
         function transfer(address to, uint256 amount) external returns (bool);
     }
+}
 
+// Identity Registry (ERC-8004) interface - matches deployed contract
+sol! {
     #[sol(rpc)]
     interface IIdentityRegistry {
-        struct AgentInfo {
-            address owner;
+        // Actual struct from deployed contract
+        struct AgentRegistration {
             uint256 agentId;
-            string tokenURI;
-            uint256 reputation;
+            address owner;
+            uint8 tier;
+            address stakedToken;
+            uint256 stakedAmount;
+            uint256 registeredAt;
+            uint256 lastActivityAt;
             bool isBanned;
-            uint256 banExpiry;
-            string banReason;
+            bool isSlashed;
         }
 
-        function register(string calldata tokenURI, uint256 stakeAmount) external returns (uint256 agentId);
-        function getAgentInfo(uint256 agentId) external view returns (AgentInfo memory);
-        function getAgentByOwner(address owner) external view returns (uint256 agentId);
-        function getBanStatus(uint256 agentId) external view returns (bool banned, uint256 expiry, string memory reason);
-    }
+        // ERC721 functions (renamed to avoid conflict with IERC20)
+        function balanceOf(address owner) external view returns (uint256);
+        function ownerOf(uint256 tokenId) external view returns (address);
+        function tokenURI(uint256 tokenId) external view returns (string memory);
 
+        // IdentityRegistry specific
+        function register(string calldata tokenURI) external payable returns (uint256 agentId);
+        function getAgent(uint256 agentId) external view returns (AgentRegistration memory);
+        function agentExists(uint256 agentId) external view returns (bool);
+        function totalAgents() external view returns (uint256);
+    }
+}
+
+// Ban Manager interface
+sol! {
     #[sol(rpc)]
     interface IBanManager {
         function isBanned(uint256 agentId) external view returns (bool);
@@ -84,7 +102,10 @@ sol! {
             bool canAppeal
         );
     }
+}
 
+// Compute Registry interface
+sol! {
     #[sol(rpc)]
     interface IComputeRegistry {
         function register(string calldata name, string calldata endpoint, bytes32 attestationHash) external payable;
@@ -106,10 +127,9 @@ sol! {
         function getProviderByAgent(uint256 agentId) external view returns (address);
         function minProviderStake() external view returns (uint256);
     }
-
 }
 
-// Separate sol! block for IIdentityRegistryV2 to avoid naming conflicts with IIdentityRegistry
+// Identity Registry V2 - simplified interface for registration
 sol! {
     #[sol(rpc)]
     interface IIdentityRegistryV2 {
@@ -257,37 +277,66 @@ impl ContractClient {
     /// Get agent info by ID
     pub async fn get_agent_info(&self, agent_id: u64) -> Result<AgentInfoResult, String> {
         let registry = IIdentityRegistry::new(self.addresses.identity_registry, &*self.provider);
+
+        // Get agent registration data
         let info = registry
-            .getAgentInfo(U256::from(agent_id))
+            .getAgent(U256::from(agent_id))
             .call()
             .await
             .map(|r| r._0)
             .map_err(|e| format!("Failed to get agent info: {}", e))?;
 
+        // Get tokenURI separately (ERC721 function)
+        let token_uri = registry
+            .tokenURI(U256::from(agent_id))
+            .call()
+            .await
+            .map(|r| r._0)
+            .unwrap_or_default();
+
         Ok(AgentInfoResult {
             owner: format!("{:?}", info.owner),
-            token_uri: info.tokenURI,
-            reputation: info.reputation.to_string(),
+            token_uri,
+            reputation: info.stakedAmount.to_string(), // Use staked amount as reputation proxy
             is_banned: info.isBanned,
-            ban_reason: info.banReason,
+            ban_reason: if info.isBanned { "Banned".to_string() } else { String::new() },
         })
     }
 
-    /// Get agent ID for an owner address
+    /// Get agent ID for an owner address (returns first agent if owner has multiple)
     pub async fn get_agent_by_owner(&self, owner: Address) -> Result<Option<u64>, String> {
         let registry = IIdentityRegistry::new(self.addresses.identity_registry, &*self.provider);
-        let agent_id = registry
-            .getAgentByOwner(owner)
+
+        // Check if owner has any agents
+        let balance = registry
+            .balanceOf(owner)
             .call()
             .await
-            .map(|r| r.agentId)
-            .map_err(|e| format!("Failed to get agent by owner: {}", e))?;
+            .map(|r| r._0)
+            .map_err(|e| format!("Failed to get balance: {}", e))?;
 
-        if agent_id == U256::ZERO {
-            Ok(None)
-        } else {
-            Ok(Some(agent_id.to::<u64>()))
+        if balance == U256::ZERO {
+            return Ok(None);
         }
+
+        // Find the agent ID by iterating through total agents
+        // This is inefficient but works without enumerable extension
+        let total = registry
+            .totalAgents()
+            .call()
+            .await
+            .map(|r| r._0)
+            .map_err(|e| format!("Failed to get total agents: {}", e))?;
+
+        for i in 1..=total.to::<u64>() {
+            if let Ok(agent_owner) = registry.ownerOf(U256::from(i)).call().await {
+                if agent_owner._0 == owner {
+                    return Ok(Some(i));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Check ban status for an agent
