@@ -129,39 +129,61 @@ pub async fn register_agent(
 
 #[tauri::command]
 pub async fn get_agent_info(state: State<'_, AppState>) -> Result<Option<AgentInfo>, String> {
+    tracing::info!("get_agent_info called");
     let inner = state.inner.read().await;
 
     // Check if we have a stored agent ID
     let stored_agent_id = inner.config.wallet.agent_id;
+    tracing::info!("Stored agent_id: {:?}", stored_agent_id);
 
     // Get contract client
-    let contract_client = inner
-        .contract_client
-        .as_ref()
-        .ok_or("Contract client not initialized")?;
+    let contract_client = match inner.contract_client.as_ref() {
+        Some(c) => c,
+        None => {
+            tracing::warn!("Contract client not initialized");
+            return Err("Contract client not initialized".to_string());
+        }
+    };
 
     // If no stored agent ID, try to look up by wallet address
     let agent_id = if let Some(id) = stored_agent_id {
+        tracing::info!("Using stored agent_id: {}", id);
         id
     } else {
         // Try to get agent by owner address
         let wallet = match inner.wallet_manager.as_ref() {
             Some(w) => w,
-            None => return Ok(None),
+            None => {
+                tracing::info!("No wallet manager, returning None");
+                return Ok(None);
+            }
         };
 
         let wallet_info = match wallet.get_info() {
             Some(info) => info,
-            None => return Ok(None),
+            None => {
+                tracing::info!("No wallet info, returning None");
+                return Ok(None);
+            }
         };
 
+        tracing::info!("Looking up agent for wallet: {}", wallet_info.address);
         let owner = Address::from_str(&wallet_info.address)
             .map_err(|e| format!("Invalid address: {}", e))?;
 
         match contract_client.get_agent_by_owner(owner).await {
-            Ok(Some(id)) => id,
-            Ok(None) => return Ok(None),
-            Err(e) => return Err(format!("Failed to get agent by owner: {}", e)),
+            Ok(Some(id)) => {
+                tracing::info!("Found agent_id {} for owner", id);
+                id
+            }
+            Ok(None) => {
+                tracing::info!("No agent found for owner");
+                return Ok(None);
+            }
+            Err(e) => {
+                tracing::error!("Error looking up agent: {}", e);
+                return Err(format!("Failed to get agent by owner: {}", e));
+            }
         }
     };
 
