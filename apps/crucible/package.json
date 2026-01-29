@@ -7,6 +7,7 @@
     "@jejunetwork/api": "workspace:*",
     "@jejunetwork/cache": "workspace:*",
     "@jejunetwork/config": "workspace:*",
+    "@jejunetwork/db": "workspace:*",
     "@jejunetwork/messaging": "workspace:*",
     "@jejunetwork/shared": "workspace:*",
     "@jejunetwork/sdk": "workspace:*",
