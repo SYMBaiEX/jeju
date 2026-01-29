@@ -152,7 +152,6 @@ impl Service for ProxyService {
             } else {
                 "stopped".to_string()
             },
-            registration_status: None,
         }
     }
 

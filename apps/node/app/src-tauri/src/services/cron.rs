@@ -155,7 +155,6 @@ impl Service for CronService {
             } else {
                 "stopped".to_string()
             },
-            registration_status: None,
         }
     }
 

@@ -152,7 +152,6 @@ impl Service for StorageService {
             } else {
                 "stopped".to_string()
             },
-            registration_status: None, // Storage doesn't register with external systems
         }
     }
 

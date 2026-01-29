@@ -3,10 +3,9 @@
 //! Registers with DWS (Decentralized Web Services) to receive inference requests
 //! and routes them to local Ollama instance.
 
-use super::{Service, ServiceId, ServiceMetadata, ServiceState, RegistrationStatus};
+use super::{Service, ServiceId, ServiceMetadata, ServiceState};
 use crate::config::ServiceConfig;
 use crate::hardware::ServiceRequirements;
-use tauri::{AppHandle, Manager};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -52,13 +51,11 @@ pub struct ComputeService {
     ollama_endpoint: Arc<RwLock<String>>,
     models: Arc<RwLock<Vec<String>>>,
     running: Arc<AtomicBool>,
-    registration_status: Arc<RwLock<RegistrationStatus>>,
     start_time: Arc<RwLock<Option<Instant>>>,
     requests_served: Arc<AtomicU64>,
     earnings_wei: Arc<RwLock<String>>,
     last_error: Arc<RwLock<Option<String>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
-    app_handle: Option<AppHandle>,
 }
 
 impl ComputeService {
@@ -70,38 +67,11 @@ impl ComputeService {
             ollama_endpoint: Arc::new(RwLock::new("http://localhost:11434".to_string())),
             models: Arc::new(RwLock::new(vec!["tinyllama".to_string()])),
             running: Arc::new(AtomicBool::new(false)),
-            registration_status: Arc::new(RwLock::new(RegistrationStatus::Idle)),
             start_time: Arc::new(RwLock::new(None)),
             requests_served: Arc::new(AtomicU64::new(0)),
             earnings_wei: Arc::new(RwLock::new("0".to_string())),
             last_error: Arc::new(RwLock::new(None)),
             shutdown_tx: None,
-            app_handle: None,
-        }
-    }
-
-    /// Set the app handle for event emissions
-    pub fn set_app_handle(&mut self, app_handle: AppHandle) {
-        self.app_handle = Some(app_handle);
-    }
-
-    /// Emit registration status change event to frontend
-    fn emit_status_change(&self, new_status: RegistrationStatus) {
-        if let Some(app_handle) = &self.app_handle {
-            let event_data = serde_json::json!({
-                "service_id": "compute",
-                "registration_status": new_status,
-                "timestamp": std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            });
-
-            if let Err(e) = app_handle.emit_all("service-status-changed", event_data) {
-                tracing::warn!("Failed to emit status change event: {}", e);
-            } else {
-                tracing::debug!("Emitted status change: {:?}", new_status);
-            }
         }
     }
 
@@ -332,30 +302,18 @@ impl Service for ComputeService {
         let (tx, mut rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(tx);
 
-        // Mark as running but pending registration
+        // Mark as running
         self.running.store(true, Ordering::SeqCst);
-        *self.registration_status.write().await = RegistrationStatus::Pending;
-        self.emit_status_change(RegistrationStatus::Pending);
         *self.start_time.write().await = Some(Instant::now());
 
         // Register with DWS
-        match self.register_with_dws().await {
-            Ok(()) => {
-                *self.registration_status.write().await = RegistrationStatus::Registered;
-                self.emit_status_change(RegistrationStatus::Registered);
-                tracing::info!("Initial DWS registration successful");
-            }
-            Err(e) => {
-                *self.registration_status.write().await = RegistrationStatus::Failed;
-                self.emit_status_change(RegistrationStatus::Failed);
-                tracing::warn!("DWS registration failed (will retry): {}", e);
-                // Don't fail startup, just log the error - we'll retry in the heartbeat loop
-            }
+        if let Err(e) = self.register_with_dws().await {
+            tracing::warn!("DWS registration failed (will retry): {}", e);
+            // Don't fail startup, just log the error - we'll retry in the heartbeat loop
         }
 
         // Clone for async task
         let running = self.running.clone();
-        let registration_status = self.registration_status.clone();
         let requests_served = self.requests_served.clone();
         let _earnings_wei = self.earnings_wei.clone();
         let last_error = self.last_error.clone();
@@ -365,31 +323,10 @@ impl Service for ComputeService {
         let wallet_address = self.wallet_address.clone();
         let ollama_endpoint = self.ollama_endpoint.clone();
         let models = self.models.clone();
-        let app_handle = self.app_handle.clone();
 
         // Spawn service task with heartbeat
         tokio::spawn(async move {
             tracing::info!("Compute service started with stake: {:?}", stake_amount);
-
-            // Helper function to emit status changes
-            let emit_status = |status: RegistrationStatus| {
-                if let Some(app) = &app_handle {
-                    let event_data = serde_json::json!({
-                        "service_id": "compute",
-                        "registration_status": status,
-                        "timestamp": std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs()
-                    });
-
-                    if let Err(e) = app.emit_all("service-status-changed", event_data) {
-                        tracing::warn!("Failed to emit status change event: {}", e);
-                    } else {
-                        tracing::debug!("Emitted status change: {:?}", status);
-                    }
-                }
-            };
 
             let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
             let mut retry_registration = false;
@@ -424,20 +361,14 @@ impl Service for ComputeService {
                                 Ok(response) => {
                                     if response.status().is_success() {
                                         tracing::debug!("Heartbeat sent successfully");
-                                        *registration_status.write().await = RegistrationStatus::Registered;
-                                        emit_status(RegistrationStatus::Registered);
                                         retry_registration = false;
                                     } else {
                                         tracing::warn!("Heartbeat failed: {}, will retry registration", response.status());
-                                        *registration_status.write().await = RegistrationStatus::Failed;
-                                        emit_status(RegistrationStatus::Failed);
                                         retry_registration = true;
                                     }
                                 }
                                 Err(e) => {
                                     tracing::warn!("Heartbeat error: {}, will retry registration", e);
-                                    *registration_status.write().await = RegistrationStatus::Failed;
-                                    emit_status(RegistrationStatus::Failed);
                                     retry_registration = true;
                                     *last_error.write().await = Some(format!("Heartbeat error: {}", e));
                                 }
@@ -446,7 +377,6 @@ impl Service for ComputeService {
                             // If heartbeat failed, try to re-register
                             if retry_registration {
                                 tracing::info!("Attempting to re-register with DWS...");
-                                *registration_status.write().await = RegistrationStatus::Pending;
                                 let register_url = format!("{}/nodes/register", dws);
                                 let endpoint = ollama_endpoint.read().await.clone();
                                 let model_list = models.read().await.clone();
@@ -471,7 +401,6 @@ impl Service for ComputeService {
                                 {
                                     if response.status().is_success() {
                                         tracing::info!("Re-registration successful");
-                                        *registration_status.write().await = RegistrationStatus::Registered;
                                         retry_registration = false;
                                     }
                                 }
@@ -508,7 +437,6 @@ impl Service for ComputeService {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         self.running.store(false, Ordering::SeqCst);
-        *self.registration_status.write().await = RegistrationStatus::Idle;
         *self.start_time.write().await = None;
 
         Ok(())
@@ -533,7 +461,6 @@ impl Service for ComputeService {
             } else {
                 "stopped".to_string()
             },
-            registration_status: Some(self.registration_status.read().await.clone()),
         }
     }
 

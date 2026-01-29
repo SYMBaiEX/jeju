@@ -20,7 +20,7 @@ import {
   Square,
   Zap,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { ServiceWithStatus } from '../../lib/types'
 import { useAppStore } from '../context/AppContext'
 import { formatEther } from '../utils'
@@ -53,7 +53,7 @@ const serviceIcons: Record<string, React.ReactNode> = {
 }
 
 export function Services() {
-  const { services, startService, stopService, hardware, wallet, isLoading, error, fetchServices } =
+  const { services, startService, stopService, hardware, wallet, isLoading, error } =
     useAppStore()
   const [expandedService, setExpandedService] = useState<string | null>(null)
   const [confirmingSequencer, setConfirmingSequencer] = useState(false)
@@ -67,40 +67,6 @@ export function Services() {
     useDocker: true,
     pricePerHour: '0.01',
   })
-
-  // Listen for real-time service status changes using window.__TAURI__ directly
-  // This avoids tree-shaking issues with the @tauri-apps/api import
-  useEffect(() => {
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      // Access Tauri event API via global object (withGlobalTauri: true in tauri.conf.json)
-      const tauri = (window as any).__TAURI__
-      if (!tauri?.event?.listen) {
-        console.warn('Tauri event API not available')
-        return
-      }
-
-      try {
-        unlisten = await tauri.event.listen('service-status-changed', (event: any) => {
-          console.log('Service status changed event received:', event.payload)
-          // Refresh services to get latest status
-          fetchServices().catch((err: Error) => console.error('Failed to fetch services:', err))
-        })
-        console.log('Service status event listener registered successfully')
-      } catch (err) {
-        console.error('Failed to register service status listener:', err)
-      }
-    }
-
-    setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [fetchServices])
 
   const hasCpuTee =
     hardware?.tee.attestation_available &&
@@ -274,27 +240,8 @@ export function Services() {
 
             {computeService.status.running && (
               <div className="flex items-center gap-2">
-                {computeService.status.registration_status === 'pending' ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                    <span className="text-sm text-yellow-400">Registering...</span>
-                  </>
-                ) : computeService.status.registration_status === 'registered' ? (
-                  <>
-                    <span className="status-healthy" />
-                    <span className="text-sm text-green-400">Registered</span>
-                  </>
-                ) : computeService.status.registration_status === 'failed' ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-red-400" />
-                    <span className="text-sm text-red-400">Registration Failed</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="status-healthy" />
-                    <span className="text-sm text-green-400">Running</span>
-                  </>
-                )}
+                <span className="status-healthy" />
+                <span className="text-sm text-green-400">Running</span>
               </div>
             )}
           </div>
@@ -673,17 +620,7 @@ export function Services() {
                       </span>
                     )}
                     {service.status.running && (
-                      <>
-                        {service.status.registration_status === 'pending' ? (
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                        ) : service.status.registration_status === 'registered' ? (
-                          <span className="status-healthy" />
-                        ) : service.status.registration_status === 'failed' ? (
-                          <div className="w-2 h-2 rounded-full bg-red-400" />
-                        ) : (
-                          <span className="status-healthy" />
-                        )}
-                      </>
+                      <span className="status-healthy" />
                     )}
                   </div>
 

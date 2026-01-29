@@ -152,7 +152,6 @@ impl Service for SolverService {
             } else {
                 "stopped".to_string()
             },
-            registration_status: None,
         }
     }
 
