@@ -305,7 +305,7 @@ export default {
           service: 'jeju-board',
           version: '1.0.0',
           runtime: 'workerd',
-          network: env.NETWORK ?? 'testnet',
+          network: env.NETWORK ?? getCurrentNetwork(),
           features: ['dao', 'governance', 'voting'],
           timestamp: new Date().toISOString(),
         }),

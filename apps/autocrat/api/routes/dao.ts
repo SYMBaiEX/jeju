@@ -1,7 +1,7 @@
 import { getChainId } from '@jejunetwork/config'
 import { ZERO_ADDRESS } from '@jejunetwork/types'
 import { Elysia, t } from 'elysia'
-import { type Address, parseEther } from 'viem'
+import type { Address } from 'viem'
 import { type DAOService, getOrCreateDAOService } from '../dao-service'
 import { getProposalAssistant } from '../proposal-assistant'
 import { autocratConfig, blockchain, config } from '../shared-state'
@@ -99,9 +99,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
           minQualityScore: body.governance.minQualityScore,
           boardVotingPeriod: body.governance.boardVotingPeriod,
           gracePeriod: body.governance.gracePeriod,
-          minProposalStake: parseEther(
-            body.governance.minProposalStake,
-          ).toString(),
+          minProposalStake: body.governance.minProposalStake,
           quorumBps: body.governance.quorumBps,
         },
       })
@@ -250,7 +248,7 @@ export const daoRoutes = new Elysia({ prefix: '/api/v1/dao' })
           minQualityScore: body.minQualityScore,
           boardVotingPeriod: body.boardVotingPeriod,
           gracePeriod: body.gracePeriod,
-          minProposalStake: parseEther(body.minProposalStake).toString(),
+          minProposalStake: body.minProposalStake,
           quorumBps: body.quorumBps,
         })
         return service.getDAOFull(params.daoId)
