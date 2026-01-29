@@ -6,6 +6,7 @@
 use super::{Service, ServiceId, ServiceMetadata, ServiceState, RegistrationStatus};
 use crate::config::ServiceConfig;
 use crate::hardware::ServiceRequirements;
+use tauri::{AppHandle, Manager};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -57,6 +58,7 @@ pub struct ComputeService {
     earnings_wei: Arc<RwLock<String>>,
     last_error: Arc<RwLock<Option<String>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    app_handle: Option<AppHandle>,
 }
 
 impl ComputeService {
@@ -74,6 +76,32 @@ impl ComputeService {
             earnings_wei: Arc::new(RwLock::new("0".to_string())),
             last_error: Arc::new(RwLock::new(None)),
             shutdown_tx: None,
+            app_handle: None,
+        }
+    }
+
+    /// Set the app handle for event emissions
+    pub fn set_app_handle(&mut self, app_handle: AppHandle) {
+        self.app_handle = Some(app_handle);
+    }
+
+    /// Emit registration status change event to frontend
+    fn emit_status_change(&self, new_status: RegistrationStatus) {
+        if let Some(app_handle) = &self.app_handle {
+            let event_data = serde_json::json!({
+                "service_id": "compute",
+                "registration_status": new_status,
+                "timestamp": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            });
+
+            if let Err(e) = app_handle.emit_all("service-status-changed", event_data) {
+                tracing::warn!("Failed to emit status change event: {}", e);
+            } else {
+                tracing::debug!("Emitted status change: {:?}", new_status);
+            }
         }
     }
 
@@ -307,16 +335,19 @@ impl Service for ComputeService {
         // Mark as running but pending registration
         self.running.store(true, Ordering::SeqCst);
         *self.registration_status.write().await = RegistrationStatus::Pending;
+        self.emit_status_change(RegistrationStatus::Pending);
         *self.start_time.write().await = Some(Instant::now());
 
         // Register with DWS
         match self.register_with_dws().await {
             Ok(()) => {
                 *self.registration_status.write().await = RegistrationStatus::Registered;
+                self.emit_status_change(RegistrationStatus::Registered);
                 tracing::info!("Initial DWS registration successful");
             }
             Err(e) => {
                 *self.registration_status.write().await = RegistrationStatus::Failed;
+                self.emit_status_change(RegistrationStatus::Failed);
                 tracing::warn!("DWS registration failed (will retry): {}", e);
                 // Don't fail startup, just log the error - we'll retry in the heartbeat loop
             }
@@ -334,10 +365,31 @@ impl Service for ComputeService {
         let wallet_address = self.wallet_address.clone();
         let ollama_endpoint = self.ollama_endpoint.clone();
         let models = self.models.clone();
+        let app_handle = self.app_handle.clone();
 
         // Spawn service task with heartbeat
         tokio::spawn(async move {
             tracing::info!("Compute service started with stake: {:?}", stake_amount);
+
+            // Helper function to emit status changes
+            let emit_status = |status: RegistrationStatus| {
+                if let Some(app) = &app_handle {
+                    let event_data = serde_json::json!({
+                        "service_id": "compute",
+                        "registration_status": status,
+                        "timestamp": std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
+                    });
+
+                    if let Err(e) = app.emit_all("service-status-changed", event_data) {
+                        tracing::warn!("Failed to emit status change event: {}", e);
+                    } else {
+                        tracing::debug!("Emitted status change: {:?}", status);
+                    }
+                }
+            };
 
             let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
             let mut retry_registration = false;
@@ -373,16 +425,19 @@ impl Service for ComputeService {
                                     if response.status().is_success() {
                                         tracing::debug!("Heartbeat sent successfully");
                                         *registration_status.write().await = RegistrationStatus::Registered;
+                                        emit_status(RegistrationStatus::Registered);
                                         retry_registration = false;
                                     } else {
                                         tracing::warn!("Heartbeat failed: {}, will retry registration", response.status());
                                         *registration_status.write().await = RegistrationStatus::Failed;
+                                        emit_status(RegistrationStatus::Failed);
                                         retry_registration = true;
                                     }
                                 }
                                 Err(e) => {
                                     tracing::warn!("Heartbeat error: {}, will retry registration", e);
                                     *registration_status.write().await = RegistrationStatus::Failed;
+                                    emit_status(RegistrationStatus::Failed);
                                     retry_registration = true;
                                     *last_error.write().await = Some(format!("Heartbeat error: {}", e));
                                 }

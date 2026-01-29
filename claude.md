@@ -3,6 +3,24 @@
 **Date Created:** January 29, 2025 05:42
 **Last Updated:** January 29, 2025 05:42
 
+## ⚠️ CRITICAL WORKFLOW REMINDER ⚠️
+
+**ALL DEVELOPMENT WORK MUST BE DONE ON THE REMOTE ORACLE CLOUD SERVER**
+
+```bash
+ssh ubuntu@192.9.153.231
+cd ~/jeju
+```
+
+**Development Workflow:**
+1. **Local MacBook:** Make changes and push to GitHub (`fresh-deploy` branch)
+2. **Remote Server:** Pull changes and build/test
+3. **NEVER:** Try to test Tauri app locally - it won't connect to remote services
+
+**Current Task:** Implementing real-time event-driven status updates for Tauri app
+- Backend: Rust ComputeService emits "service-status-changed" events ✅ DONE
+- Frontend: Add event listeners in Services.tsx ⚠️ IN PROGRESS (must be done on remote server)
+
 ## Development Environment
 
 ### Local Setup

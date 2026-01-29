@@ -20,7 +20,8 @@ import {
   Square,
   Zap,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import type { ServiceWithStatus } from '../../lib/types'
 import { useAppStore } from '../context/AppContext'
 import { formatEther } from '../utils'
@@ -67,6 +68,31 @@ export function Services() {
     useDocker: true,
     pricePerHour: '0.01',
   })
+
+  // Listen for real-time service status changes
+  useEffect(() => {
+    let unlisten: () => void
+
+    const setupEventListener = async () => {
+      try {
+        unlisten = await listen('service-status-changed', (event) => {
+          console.log('Service status changed:', event.payload)
+          // Force a refresh of services data to get the latest status
+          // The useAppStore hook should trigger a re-render when services data updates
+        })
+      } catch (error) {
+        console.error('Failed to set up service status event listener:', error)
+      }
+    }
+
+    setupEventListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [])
 
   const hasCpuTee =
     hardware?.tee.attestation_available &&
