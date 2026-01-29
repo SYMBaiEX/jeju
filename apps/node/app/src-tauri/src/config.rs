@@ -60,7 +60,7 @@ pub struct ContractsConfig {
 }
 
 fn default_compute_staking() -> String {
-    "0x5Ffe31E4676D3466268e28a75E51d1eFa4298620".to_string()
+    "0x06b3244b086cecC40F1e5A826f736Ded68068a0F".to_string()
 }
 
 impl ContractsConfig {
@@ -71,8 +71,8 @@ impl ContractsConfig {
             node_staking_manager: "0xc5a5C42992dECbae36851359345FE25997F5C42d".to_string(),
             identity_registry: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9".to_string(),
             ban_manager: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0".to_string(),
-            jeju_token: "0x4eaB29997D332A666c3C366217Ab177cF9A7C436".to_string(),
-            compute_staking: "0x5Ffe31E4676D3466268e28a75E51d1eFa4298620".to_string(),
+            jeju_token: "0x0B306BF915C4d645ff596e518fAf3F9669b97016".to_string(),
+            compute_staking: "0x976fcd02f7C4773dd89C309fBF55D5923B4c98a1".to_string(),
         }
     }
 
