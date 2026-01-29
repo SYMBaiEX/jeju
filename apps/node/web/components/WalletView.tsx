@@ -45,7 +45,7 @@ const ImportWalletRequestSchema = z
 type WalletAction = 'create' | 'import' | 'external' | null
 
 export function WalletView() {
-  const { wallet, balance, agent, fetchWallet, fetchBalance, isLoading } =
+  const { wallet, balance, agent, fetchWallet, fetchBalance, fetchAgent, isLoading } =
     useAppStore()
   const [action, setAction] = useState<WalletAction>(null)
   const [password, setPassword] = useState('')
@@ -66,6 +66,7 @@ export function WalletView() {
       await invoke('create_wallet', { request })
       await fetchWallet()
       await fetchBalance()
+      await fetchAgent()
       setAction(null)
       setPassword('')
     } catch (err) {
@@ -97,6 +98,7 @@ export function WalletView() {
       await invoke('import_wallet', { request })
       await fetchWallet()
       await fetchBalance()
+      await fetchAgent()
       setAction(null)
       setPassword('')
       setPrivateKey('')
@@ -576,7 +578,7 @@ export function WalletView() {
                   console.log('Agent registration tx:', result.tx_hash)
                   // Wait a moment for transaction to be mined
                   await new Promise(resolve => setTimeout(resolve, 2000))
-                  await fetchWallet()
+                  await fetchAgent()
                 } catch (e) {
                   setError(e instanceof Error ? e.message : String(e))
                 } finally {

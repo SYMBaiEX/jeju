@@ -362,8 +362,15 @@ export const NetworkConfigSchema = z.object({
   explorer_url: z.string().url(),
 })
 
+export const BuildInfoSchema = z.object({
+  version: z.string().min(1),
+  build_timestamp: z.number().int().nonnegative(),
+  build_date: z.string().min(1),
+})
+
 export const AppConfigSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format'),
+  build_info: BuildInfoSchema,
   network: NetworkConfigSchema,
   wallet: z.object({
     wallet_type: z.string().min(1),
