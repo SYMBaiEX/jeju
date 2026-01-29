@@ -84,6 +84,39 @@ sol! {
             bool canAppeal
         );
     }
+
+    #[sol(rpc)]
+    interface IComputeRegistry {
+        function register(string calldata name, string calldata endpoint, bytes32 attestationHash) external payable;
+        function registerWithAgent(string calldata name, string calldata endpoint, bytes32 attestationHash, uint256 agentId) external payable;
+        function addCapability(string calldata model, uint256 pricePerInputToken, uint256 pricePerOutputToken, uint256 maxContextLength) external;
+        function deactivate() external;
+        function reactivate() external;
+        function getProvider(address provider) external view returns (
+            address owner,
+            string memory name,
+            string memory endpoint,
+            bytes32 attestationHash,
+            uint256 stake,
+            uint256 registeredAt,
+            uint256 agentId,
+            bytes32 serviceType,
+            bool active
+        );
+        function getProviderByAgent(uint256 agentId) external view returns (address);
+        function minProviderStake() external view returns (uint256);
+    }
+
+}
+
+// Separate sol! block for IIdentityRegistryV2 to avoid naming conflicts with IIdentityRegistry
+sol! {
+    #[sol(rpc)]
+    interface IIdentityRegistryV2 {
+        function register(string calldata tokenURI) external returns (uint256 agentId);
+        function agentExists(uint256 agentId) external view returns (bool);
+        function ownerOf(uint256 agentId) external view returns (address);
+    }
 }
 
 /// Client for interacting with Jeju Network contracts
@@ -100,6 +133,7 @@ pub struct ContractAddresses {
     pub ban_manager: Address,
     pub jeju_token: Address,
     pub compute_staking: Address,
+    pub compute_registry: Address,
 }
 
 impl ContractAddresses {
@@ -116,6 +150,8 @@ impl ContractAddresses {
                 .map_err(|e| format!("Invalid jeju_token address: {}", e))?,
             compute_staking: Address::from_str(&config.compute_staking)
                 .map_err(|e| format!("Invalid compute_staking address: {}", e))?,
+            compute_registry: Address::from_str(&config.compute_registry)
+                .map_err(|e| format!("Invalid compute_registry address: {}", e))?,
         })
     }
 
@@ -287,6 +323,49 @@ impl ContractClient {
             can_appeal,
         })
     }
+
+    /// Get compute provider info
+    pub async fn get_compute_provider(
+        &self,
+        provider: Address,
+    ) -> Result<Option<ComputeProviderResult>, String> {
+        let registry = IComputeRegistry::new(self.addresses.compute_registry, &*self.provider);
+
+        let result = registry
+            .getProvider(provider)
+            .call()
+            .await
+            .map_err(|e| format!("Failed to get provider: {}", e))?;
+
+        // Check if provider is registered (registeredAt > 0)
+        if result.registeredAt == U256::ZERO {
+            return Ok(None);
+        }
+
+        Ok(Some(ComputeProviderResult {
+            address: format!("{:?}", provider),
+            name: result.name,
+            endpoint: result.endpoint,
+            agent_id: result.agentId.to::<u64>(),
+            stake: result.stake.to_string(),
+            is_active: result.active,
+            registered_at: result.registeredAt.to::<u64>(),
+        }))
+    }
+
+    /// Get minimum stake required for compute registration
+    pub async fn get_min_compute_stake(&self) -> Result<String, String> {
+        let registry = IComputeRegistry::new(self.addresses.compute_registry, &*self.provider);
+
+        let min_stake = registry
+            .minProviderStake()
+            .call()
+            .await
+            .map(|r| r._0)
+            .map_err(|e| format!("Failed to get min stake: {}", e))?;
+
+        Ok(min_stake.to_string())
+    }
 }
 
 /// Result structure for node stake info
@@ -318,4 +397,16 @@ pub struct BanStatusResult {
     pub expiry: u64,
     pub reason: String,
     pub can_appeal: bool,
+}
+
+/// Result structure for compute provider info
+#[derive(Debug, Clone)]
+pub struct ComputeProviderResult {
+    pub address: String,
+    pub name: String,
+    pub endpoint: String,
+    pub agent_id: u64,
+    pub stake: String,
+    pub is_active: bool,
+    pub registered_at: u64,
 }

@@ -85,6 +85,15 @@ fn main() {
             commands::bots::stop_bot,
             commands::bots::get_bot_status,
             commands::bots::get_bot_earnings,
+            // Compute provider registration
+            commands::compute::register_agent_identity,
+            commands::compute::get_wallet_agent_id,
+            commands::compute::register_compute_provider,
+            commands::compute::add_compute_capability,
+            commands::compute::get_compute_provider_info,
+            commands::compute::deactivate_compute_provider,
+            commands::compute::reactivate_compute_provider,
+            commands::compute::get_min_compute_stake,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

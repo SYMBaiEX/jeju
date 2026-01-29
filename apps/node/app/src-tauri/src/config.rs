@@ -57,10 +57,16 @@ pub struct ContractsConfig {
     pub jeju_token: String,
     #[serde(default = "default_compute_staking")]
     pub compute_staking: String,
+    #[serde(default = "default_compute_registry")]
+    pub compute_registry: String,
 }
 
 fn default_compute_staking() -> String {
     "0x06b3244b086cecC40F1e5A826f736Ded68068a0F".to_string()
+}
+
+fn default_compute_registry() -> String {
+    "0x666D0c3da3dBc946D5128D06115bb4eed4595580".to_string()
 }
 
 impl ContractsConfig {
@@ -73,6 +79,7 @@ impl ContractsConfig {
             ban_manager: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0".to_string(),
             jeju_token: "0x0B306BF915C4d645ff596e518fAf3F9669b97016".to_string(),
             compute_staking: "0x976fcd02f7C4773dd89C309fBF55D5923B4c98a1".to_string(),
+            compute_registry: "0x666D0c3da3dBc946D5128D06115bb4eed4595580".to_string(),
         }
     }
 
@@ -84,6 +91,7 @@ impl ContractsConfig {
             ban_manager: "0x0000000000000000000000000000000000000000".to_string(),
             jeju_token: "0x0000000000000000000000000000000000000000".to_string(),
             compute_staking: "0x0000000000000000000000000000000000000000".to_string(),
+            compute_registry: "0x0000000000000000000000000000000000000000".to_string(),
         }
     }
 

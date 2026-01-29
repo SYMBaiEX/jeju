@@ -569,9 +569,19 @@ export function WalletView() {
               onClick={async () => {
                 setLoading(true)
                 setError(null)
-                await invoke('register_agent', { request: { tokenUri: '', stakeTier: 'small' } })
-                await fetchWallet()
-                setLoading(false)
+                try {
+                  const result = await invoke<{ tx_hash: string; status: string }>('register_agent', {
+                    request: { tokenUri: '', stakeTier: 'small' }
+                  })
+                  console.log('Agent registration tx:', result.tx_hash)
+                  // Wait a moment for transaction to be mined
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+                  await fetchWallet()
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : String(e))
+                } finally {
+                  setLoading(false)
+                }
               }}
               disabled={loading}
               className="btn-primary"
