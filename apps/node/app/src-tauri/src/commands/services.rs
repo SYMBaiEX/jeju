@@ -163,10 +163,53 @@ pub async fn start_service(
     if service_id == ServiceId::Compute {
         if let Some(ref wallet_addr) = wallet_address {
             let registry_address = &inner.config.network.contracts.compute_registry;
-            let agent_id = inner.config.wallet.agent_id;
+            let identity_registry = &inner.config.network.contracts.identity_registry;
             let rpc_url = &inner.config.network.rpc_url;
 
-            // Check if we have an agent_id configured
+            // Try to get agent_id from config, or look it up from IdentityRegistry
+            let agent_id = if let Some(id) = inner.config.wallet.agent_id {
+                Some(id)
+            } else {
+                // Look up agent_id from IdentityRegistry by owner address
+                tracing::info!("No agent_id in config, looking up from IdentityRegistry...");
+                let provider = ProviderBuilder::new()
+                    .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
+
+                let registry = Address::from_str(identity_registry)
+                    .map_err(|e| format!("Invalid identity registry address: {}", e))?;
+                let wallet = Address::from_str(wallet_addr)
+                    .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+                // Call getAgentByOwner on IdentityRegistry
+                sol! {
+                    interface IIdentityRegistry {
+                        function getAgentByOwner(address owner) external view returns (uint256);
+                    }
+                }
+
+                let id_contract = IIdentityRegistry::new(registry, &provider);
+                match id_contract.getAgentByOwner(wallet).call().await {
+                    Ok(result) => {
+                        let id = result._0.try_into().unwrap_or(0u64);
+                        if id > 0 {
+                            tracing::info!("Found agent_id {} for wallet {}", id, wallet_addr);
+                            // Save to config for future use
+                            inner.config.wallet.agent_id = Some(id);
+                            let _ = inner.config.save(); // Best effort save
+                            Some(id)
+                        } else {
+                            tracing::warn!("No agent found for wallet {}", wallet_addr);
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to look up agent_id: {}", e);
+                        None
+                    }
+                }
+            };
+
+            // Check if we have an agent_id
             if let Some(agent_id) = agent_id {
                 tracing::info!(
                     "Checking on-chain registration for wallet {} with agent {} on registry {}",
