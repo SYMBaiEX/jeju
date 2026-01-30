@@ -203,6 +203,31 @@ pub async fn start_service(
 
             // Check if we have an agent_id
             if let Some(agent_id) = agent_id {
+                // First check if the agent has enough stake
+                const MIN_STAKE_WEI: u128 = 10_000_000_000_000_000; // 0.01 ETH
+
+                if let Some(ref contract_client) = inner.contract_client {
+                    let wallet = Address::from_str(wallet_addr)
+                        .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+                    // Get current stake amount
+                    let stakes = contract_client.get_staking_info(wallet).await.unwrap_or_default();
+                    let total_staked: u128 = stakes.iter()
+                        .map(|s| s.staked_amount.parse::<u128>().unwrap_or(0))
+                        .sum();
+
+                    if total_staked < MIN_STAKE_WEI {
+                        let min_eth = MIN_STAKE_WEI as f64 / 1e18;
+                        let current_eth = total_staked as f64 / 1e18;
+                        return Err(format!(
+                            "Insufficient stake to register compute provider. Minimum required: {} ETH, current stake: {} ETH. Please stake at least {} ETH first.",
+                            min_eth, current_eth, min_eth
+                        ));
+                    }
+
+                    tracing::info!("Stake check passed: {} wei staked (min: {} wei)", total_staked, MIN_STAKE_WEI);
+                }
+
                 tracing::info!(
                     "Checking on-chain registration for wallet {} with agent {} on registry {}",
                     wallet_addr,
@@ -216,12 +241,12 @@ pub async fn start_service(
 
                 let registry = Address::from_str(&registry_address)
                     .map_err(|e| format!("Invalid registry address: {}", e))?;
-                let wallet = Address::from_str(wallet_addr)
+                let wallet_address_parsed = Address::from_str(wallet_addr)
                     .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
                 let contract = IComputeRegistry::new(registry, &provider);
 
-                let is_registered = match contract.hasValidAgent(wallet).call().await {
+                let is_registered = match contract.hasValidAgent(wallet_address_parsed).call().await {
                     Ok(result) => result._0,
                     Err(e) => {
                         tracing::warn!("Failed to check on-chain registration: {}", e);
