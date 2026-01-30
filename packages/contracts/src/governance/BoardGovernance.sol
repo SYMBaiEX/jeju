@@ -29,6 +29,15 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
     /// @notice Check if proposal exists
     mapping(bytes32 => bool) private _proposalExists;
 
+    /// @notice Votes per proposal (proposalId => agentId => Vote)
+    mapping(bytes32 => mapping(uint256 => Vote)) private _votes;
+
+    /// @notice List of voters per proposal (proposalId => agentId[])
+    mapping(bytes32 => uint256[]) private _proposalVoters;
+
+    /// @notice Check if agent has voted on proposal
+    mapping(bytes32 => mapping(uint256 => bool)) private _hasVoted;
+
     /// @notice Autocrat operator address (can update statuses)
     address public autocratOperator;
 
@@ -49,6 +58,8 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
     error InvalidStatus();
     error InvalidProposalType();
     error GracePeriodNotComplete();
+    error VotingEnded();
+    error AgentNotFound();
 
     // ============ Modifiers ============
 
@@ -195,6 +206,44 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
         emit ProposalStatusChanged(proposalId, oldStatus, ProposalStatus.REJECTED);
     }
 
+    // ============ Board Voting Functions ============
+
+    /**
+     * @notice Cast a vote on a proposal (Autocrat only - agents vote through API)
+     * @param proposalId The proposal to vote on
+     * @param agentId The agent's ID from IdentityRegistry
+     * @param vote The vote choice (APPROVE, REJECT, ABSTAIN)
+     * @param reasoningHash IPFS hash of the vote reasoning
+     */
+    function castVote(bytes32 proposalId, uint256 agentId, VoteChoice vote, bytes32 reasoningHash)
+        external
+        onlyAutocrat
+        proposalExists(proposalId)
+    {
+        Proposal storage p = _proposals[proposalId];
+
+        // Check voting is still open
+        if (block.timestamp > p.autocratVoteEnd) revert VotingEnded();
+
+        // Check if this is a new vote or update
+        bool isNewVote = !_hasVoted[proposalId][agentId];
+
+        // Store the vote
+        _votes[proposalId][agentId] = Vote({
+            agentId: agentId,
+            vote: vote,
+            reasoningHash: reasoningHash,
+            votedAt: block.timestamp
+        });
+
+        if (isNewVote) {
+            _hasVoted[proposalId][agentId] = true;
+            _proposalVoters[proposalId].push(agentId);
+        }
+
+        emit VoteCast(proposalId, agentId, vote, reasoningHash);
+    }
+
     // ============ Read Functions ============
 
     function isProposalApproved(bytes32 proposalId) external view returns (bool) {
@@ -217,6 +266,45 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
 
     function proposalCount(bytes32 daoId) external view returns (uint256) {
         return _daoProposals[daoId].length;
+    }
+
+    /**
+     * @notice Get all votes for a proposal
+     */
+    function getVotes(bytes32 proposalId) external view returns (Vote[] memory) {
+        uint256[] storage voters = _proposalVoters[proposalId];
+        Vote[] memory votes = new Vote[](voters.length);
+        for (uint256 i = 0; i < voters.length; i++) {
+            votes[i] = _votes[proposalId][voters[i]];
+        }
+        return votes;
+    }
+
+    /**
+     * @notice Get a specific agent's vote on a proposal
+     */
+    function getVote(bytes32 proposalId, uint256 agentId) external view returns (Vote memory) {
+        return _votes[proposalId][agentId];
+    }
+
+    /**
+     * @notice Check if an agent has voted on a proposal
+     */
+    function hasVoted(bytes32 proposalId, uint256 agentId) external view returns (bool) {
+        return _hasVoted[proposalId][agentId];
+    }
+
+    /**
+     * @notice Get vote counts for a proposal
+     */
+    function getVoteCounts(bytes32 proposalId) external view returns (uint256 approvals, uint256 rejections, uint256 abstentions) {
+        uint256[] storage voters = _proposalVoters[proposalId];
+        for (uint256 i = 0; i < voters.length; i++) {
+            VoteChoice v = _votes[proposalId][voters[i]].vote;
+            if (v == VoteChoice.APPROVE) approvals++;
+            else if (v == VoteChoice.REJECT) rejections++;
+            else abstentions++;
+        }
     }
 
     // ============ Admin Functions ============

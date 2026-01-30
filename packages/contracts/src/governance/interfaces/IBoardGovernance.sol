@@ -22,6 +22,19 @@ interface IBoardGovernance {
         SPAM
     }
 
+    enum VoteChoice {
+        APPROVE,
+        REJECT,
+        ABSTAIN
+    }
+
+    struct Vote {
+        uint256 agentId;
+        VoteChoice vote;
+        bytes32 reasoningHash; // IPFS hash of full reasoning
+        uint256 votedAt;
+    }
+
     struct Proposal {
         bytes32 proposalId;
         address proposer;
@@ -58,6 +71,13 @@ interface IBoardGovernance {
     function updateProposalStatus(bytes32 proposalId, ProposalStatus status) external;
     function setDirectorApproval(bytes32 proposalId, bool approved, bytes32 decisionHash) external;
 
+    // Board voting functions
+    function castVote(bytes32 proposalId, uint256 agentId, VoteChoice vote, bytes32 reasoningHash) external;
+    function getVotes(bytes32 proposalId) external view returns (Vote[] memory);
+    function getVote(bytes32 proposalId, uint256 agentId) external view returns (Vote memory);
+    function hasVoted(bytes32 proposalId, uint256 agentId) external view returns (bool);
+    function getVoteCounts(bytes32 proposalId) external view returns (uint256 approvals, uint256 rejections, uint256 abstentions);
+
     // Read functions
     function isProposalApproved(bytes32 proposalId) external view returns (bool);
     function isGracePeriodComplete(bytes32 proposalId) external view returns (bool);
@@ -79,4 +99,5 @@ interface IBoardGovernance {
     );
     event ProposalStatusChanged(bytes32 indexed proposalId, ProposalStatus oldStatus, ProposalStatus newStatus);
     event DirectorDecision(bytes32 indexed proposalId, bool approved, bytes32 decisionHash);
+    event VoteCast(bytes32 indexed proposalId, uint256 indexed agentId, VoteChoice vote, bytes32 reasoningHash);
 }

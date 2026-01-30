@@ -89,11 +89,73 @@ const BOARD_GOVERNANCE_ABI = [
       { name: 'contentHash', type: 'bytes32', indexed: false },
     ],
   },
+  // Board voting functions
+  {
+    type: 'function',
+    name: 'castVote',
+    inputs: [
+      { name: 'proposalId', type: 'bytes32' },
+      { name: 'agentId', type: 'uint256' },
+      { name: 'vote', type: 'uint8' },
+      { name: 'reasoningHash', type: 'bytes32' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getVotes',
+    inputs: [{ name: 'proposalId', type: 'bytes32' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple[]',
+        components: [
+          { name: 'agentId', type: 'uint256' },
+          { name: 'vote', type: 'uint8' },
+          { name: 'reasoningHash', type: 'bytes32' },
+          { name: 'votedAt', type: 'uint256' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getVoteCounts',
+    inputs: [{ name: 'proposalId', type: 'bytes32' }],
+    outputs: [
+      { name: 'approvals', type: 'uint256' },
+      { name: 'rejections', type: 'uint256' },
+      { name: 'abstentions', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'hasVoted',
+    inputs: [
+      { name: 'proposalId', type: 'bytes32' },
+      { name: 'agentId', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'VoteCast',
+    inputs: [
+      { name: 'proposalId', type: 'bytes32', indexed: true },
+      { name: 'agentId', type: 'uint256', indexed: true },
+      { name: 'vote', type: 'uint8', indexed: false },
+      { name: 'reasoningHash', type: 'bytes32', indexed: false },
+    ],
+  },
 ] as const
 
-// Localnet BoardGovernance address - deployed above
+// Localnet BoardGovernance address - deployed via DeployBoardGovernance.s.sol
 const BOARD_GOVERNANCE_ADDRESS: Address =
-  '0x8F4ec854Dd12F1fe79500a1f53D0cbB30f9b6134'
+  '0xeF31027350Be2c7439C1b0BE022d49421488b72C'
 
 // Default operator key (localnet only)
 const DEFAULT_OPERATOR_KEY =
@@ -117,6 +179,34 @@ export interface OnChainProposal {
   contentHash: string
   targetContract: Address
   value: string
+}
+
+// Vote choice enum matching contract
+export const VoteChoice = {
+  APPROVE: 0,
+  REJECT: 1,
+  ABSTAIN: 2,
+} as const
+export type VoteChoiceType = (typeof VoteChoice)[keyof typeof VoteChoice]
+
+export interface VoteSubmission {
+  proposalId: string
+  agentId: bigint
+  vote: VoteChoiceType
+  reasoningHash: string
+}
+
+export interface OnChainVote {
+  agentId: string
+  vote: VoteChoiceType
+  reasoningHash: string
+  votedAt: number
+}
+
+export interface VoteCounts {
+  approvals: number
+  rejections: number
+  abstentions: number
 }
 
 function getChain(): Chain {
@@ -266,6 +356,96 @@ class ProposalService {
     })
 
     return Number(result)
+  }
+
+  /**
+   * Cast a vote on a proposal (on-chain)
+   */
+  async castVote(params: VoteSubmission): Promise<{ txHash: Hash }> {
+    const proposalIdBytes = params.proposalId.startsWith('0x')
+      ? (params.proposalId as `0x${string}`)
+      : toHex(params.proposalId, { size: 32 })
+
+    const reasoningHashBytes = params.reasoningHash.startsWith('0x')
+      ? (params.reasoningHash as `0x${string}`)
+      : toHex(params.reasoningHash, { size: 32 })
+
+    const { request } = await this.publicClient.simulateContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'castVote',
+      args: [proposalIdBytes, params.agentId, params.vote, reasoningHashBytes],
+      account: this.walletClient.account,
+    })
+
+    const txHash = await this.walletClient.writeContract(request)
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
+
+    return { txHash }
+  }
+
+  /**
+   * Get all votes for a proposal
+   */
+  async getVotes(proposalId: string): Promise<OnChainVote[]> {
+    const proposalIdBytes = proposalId.startsWith('0x')
+      ? (proposalId as `0x${string}`)
+      : toHex(proposalId, { size: 32 })
+
+    const result = await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'getVotes',
+      args: [proposalIdBytes],
+    })
+
+    return (result as readonly { agentId: bigint; vote: number; reasoningHash: `0x${string}`; votedAt: bigint }[]).map((v) => ({
+      agentId: v.agentId.toString(),
+      vote: v.vote as VoteChoiceType,
+      reasoningHash: v.reasoningHash,
+      votedAt: Number(v.votedAt),
+    }))
+  }
+
+  /**
+   * Get vote counts for a proposal
+   */
+  async getVoteCounts(proposalId: string): Promise<VoteCounts> {
+    const proposalIdBytes = proposalId.startsWith('0x')
+      ? (proposalId as `0x${string}`)
+      : toHex(proposalId, { size: 32 })
+
+    const result = await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'getVoteCounts',
+      args: [proposalIdBytes],
+    })
+
+    const [approvals, rejections, abstentions] = result as [bigint, bigint, bigint]
+    return {
+      approvals: Number(approvals),
+      rejections: Number(rejections),
+      abstentions: Number(abstentions),
+    }
+  }
+
+  /**
+   * Check if an agent has voted on a proposal
+   */
+  async hasVoted(proposalId: string, agentId: bigint): Promise<boolean> {
+    const proposalIdBytes = proposalId.startsWith('0x')
+      ? (proposalId as `0x${string}`)
+      : toHex(proposalId, { size: 32 })
+
+    const result = await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'hasVoted',
+      args: [proposalIdBytes, agentId],
+    })
+
+    return result as boolean
   }
 }
 
