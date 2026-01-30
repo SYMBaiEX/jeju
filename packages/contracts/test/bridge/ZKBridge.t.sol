@@ -150,6 +150,9 @@ contract MockBoard is IBoardGovernance {
     function getVoteCounts(bytes32) external pure returns (uint256, uint256, uint256) {
         return (0, 0, 0);
     }
+    function isDirectorDecided(bytes32) external pure returns (bool) {
+        return false;
+    }
 }
 
 // Mock ZK verifier

@@ -56,6 +56,7 @@ interface IBoardGovernance {
         bytes32 researchHash;
         bool directorApproved;
         bytes32 directorDecisionHash;
+        bool directorDecided; // Immutable once set
     }
 
     // Write functions
@@ -81,6 +82,7 @@ interface IBoardGovernance {
     // Read functions
     function isProposalApproved(bytes32 proposalId) external view returns (bool);
     function isGracePeriodComplete(bytes32 proposalId) external view returns (bool);
+    function isDirectorDecided(bytes32 proposalId) external view returns (bool);
     function getProposal(bytes32 proposalId) external view returns (Proposal memory);
     function getProposalsByDAO(bytes32 daoId) external view returns (bytes32[] memory);
 
@@ -98,6 +100,6 @@ interface IBoardGovernance {
         bytes32 contentHash
     );
     event ProposalStatusChanged(bytes32 indexed proposalId, ProposalStatus oldStatus, ProposalStatus newStatus);
-    event DirectorDecision(bytes32 indexed proposalId, bool approved, bytes32 decisionHash);
+    event DirectorDecision(bytes32 indexed proposalId, bool approved, bytes32 decisionHash, uint256 decidedAt);
     event VoteCast(bytes32 indexed proposalId, uint256 indexed agentId, VoteChoice vote, bytes32 reasoningHash);
 }

@@ -60,6 +60,7 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
     error GracePeriodNotComplete();
     error VotingEnded();
     error AgentNotFound();
+    error AlreadyDecided();
 
     // ============ Modifiers ============
 
@@ -126,7 +127,8 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
             hasResearch: false,
             researchHash: bytes32(0),
             directorApproved: false,
-            directorDecisionHash: bytes32(0)
+            directorDecisionHash: bytes32(0),
+            directorDecided: false
         });
 
         _proposalExists[proposalId] = true;
@@ -149,21 +151,25 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Record Director's decision (Autocrat only)
+     * @notice Record Director's decision (Autocrat only, immutable once set)
      */
     function setDirectorApproval(bytes32 proposalId, bool approved, bytes32 decisionHash)
         external
         onlyAutocrat
         proposalExists(proposalId)
     {
-        _proposals[proposalId].directorApproved = approved;
-        _proposals[proposalId].directorDecisionHash = decisionHash;
+        Proposal storage p = _proposals[proposalId];
+        if (p.directorDecided) revert AlreadyDecided();
 
-        ProposalStatus oldStatus = _proposals[proposalId].status;
+        p.directorApproved = approved;
+        p.directorDecisionHash = decisionHash;
+        p.directorDecided = true;
+
+        ProposalStatus oldStatus = p.status;
         ProposalStatus newStatus = approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED;
-        _proposals[proposalId].status = newStatus;
+        p.status = newStatus;
 
-        emit DirectorDecision(proposalId, approved, decisionHash);
+        emit DirectorDecision(proposalId, approved, decisionHash, block.timestamp);
         emit ProposalStatusChanged(proposalId, oldStatus, newStatus);
     }
 
@@ -254,6 +260,10 @@ contract BoardGovernance is IBoardGovernance, Ownable, ReentrancyGuard {
 
     function isGracePeriodComplete(bytes32 proposalId) external view returns (bool) {
         return block.timestamp >= _proposals[proposalId].gracePeriodEnd;
+    }
+
+    function isDirectorDecided(bytes32 proposalId) external view returns (bool) {
+        return _proposals[proposalId].directorDecided;
     }
 
     function getProposal(bytes32 proposalId) external view returns (Proposal memory) {

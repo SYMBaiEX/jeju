@@ -151,11 +151,40 @@ const BOARD_GOVERNANCE_ABI = [
       { name: 'reasoningHash', type: 'bytes32', indexed: false },
     ],
   },
+  // Director decision functions
+  {
+    type: 'function',
+    name: 'setDirectorApproval',
+    inputs: [
+      { name: 'proposalId', type: 'bytes32' },
+      { name: 'approved', type: 'bool' },
+      { name: 'decisionHash', type: 'bytes32' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'isDirectorDecided',
+    inputs: [{ name: 'proposalId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'DirectorDecision',
+    inputs: [
+      { name: 'proposalId', type: 'bytes32', indexed: true },
+      { name: 'approved', type: 'bool', indexed: false },
+      { name: 'decisionHash', type: 'bytes32', indexed: false },
+      { name: 'decidedAt', type: 'uint256', indexed: false },
+    ],
+  },
 ] as const
 
 // Localnet BoardGovernance address - deployed via DeployBoardGovernance.s.sol
 const BOARD_GOVERNANCE_ADDRESS: Address =
-  '0xeF31027350Be2c7439C1b0BE022d49421488b72C'
+  '0x63fea6e447f120b8faf85b53cdad8348e645d80e'
 
 // Default operator key (localnet only)
 const DEFAULT_OPERATOR_KEY =
@@ -207,6 +236,12 @@ export interface VoteCounts {
   approvals: number
   rejections: number
   abstentions: number
+}
+
+export interface DirectorDecisionSubmission {
+  proposalId: string
+  approved: boolean
+  decisionHash: string // Hash of reasoning stored off-chain
 }
 
 function getChain(): Chain {
@@ -443,6 +478,50 @@ class ProposalService {
       abi: BOARD_GOVERNANCE_ABI,
       functionName: 'hasVoted',
       args: [proposalIdBytes, agentId],
+    })
+
+    return result as boolean
+  }
+
+  /**
+   * Submit director decision (on-chain, immutable once set)
+   */
+  async submitDirectorDecision(params: DirectorDecisionSubmission): Promise<{ txHash: Hash }> {
+    const proposalIdBytes = params.proposalId.startsWith('0x')
+      ? (params.proposalId as `0x${string}`)
+      : toHex(params.proposalId, { size: 32 })
+
+    const decisionHashBytes = params.decisionHash.startsWith('0x')
+      ? (params.decisionHash as `0x${string}`)
+      : toHex(params.decisionHash, { size: 32 })
+
+    const { request } = await this.publicClient.simulateContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'setDirectorApproval',
+      args: [proposalIdBytes, params.approved, decisionHashBytes],
+      account: this.walletClient.account,
+    })
+
+    const txHash = await this.walletClient.writeContract(request)
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
+
+    return { txHash }
+  }
+
+  /**
+   * Check if director has decided on a proposal
+   */
+  async isDirectorDecided(proposalId: string): Promise<boolean> {
+    const proposalIdBytes = proposalId.startsWith('0x')
+      ? (proposalId as `0x${string}`)
+      : toHex(proposalId, { size: 32 })
+
+    const result = await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: BOARD_GOVERNANCE_ABI,
+      functionName: 'isDirectorDecided',
+      args: [proposalIdBytes],
     })
 
     return result as boolean
