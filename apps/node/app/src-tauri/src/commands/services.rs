@@ -170,9 +170,10 @@ pub async fn start_service(
     // For compute service, check and perform on-chain registration if needed
     if service_id == ServiceId::Compute {
         if let Some(ref wallet_addr) = wallet_address {
-            let registry_address = &inner.config.network.contracts.compute_registry;
-            let identity_registry = &inner.config.network.contracts.identity_registry;
-            let rpc_url = &inner.config.network.rpc_url;
+            // Clone to avoid borrow conflicts when we need to mutate inner later
+            let registry_address = inner.config.network.contracts.compute_registry.clone();
+            let identity_registry = inner.config.network.contracts.identity_registry.clone();
+            let rpc_url = inner.config.network.rpc_url.clone();
 
             // Try to get agent_id from config, or look it up from IdentityRegistry
             let agent_id = if let Some(id) = inner.config.wallet.agent_id {
@@ -183,7 +184,7 @@ pub async fn start_service(
                 let provider = ProviderBuilder::new()
                     .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
 
-                let id_registry = Address::from_str(identity_registry)
+                let id_registry = Address::from_str(&identity_registry)
                     .map_err(|e| format!("Invalid identity registry address: {}", e))?;
                 let wallet = Address::from_str(wallet_addr)
                     .map_err(|e| format!("Invalid wallet address: {}", e))?;
@@ -223,7 +224,7 @@ pub async fn start_service(
                 let provider = ProviderBuilder::new()
                     .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
 
-                let registry = Address::from_str(registry_address)
+                let registry = Address::from_str(&registry_address)
                     .map_err(|e| format!("Invalid registry address: {}", e))?;
                 let wallet = Address::from_str(wallet_addr)
                     .map_err(|e| format!("Invalid wallet address: {}", e))?;
@@ -260,7 +261,7 @@ pub async fn start_service(
                     // Send transaction using wallet_manager
                     if let Some(ref wallet_manager) = inner.wallet_manager {
                         match wallet_manager
-                            .send_transaction(registry_address, "0", Some(&calldata))
+                            .send_transaction(&registry_address, "0", Some(&calldata))
                             .await
                         {
                             Ok(result) => {
