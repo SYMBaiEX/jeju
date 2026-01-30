@@ -29,6 +29,14 @@ sol! {
     }
 }
 
+// IdentityRegistry interface for agent lookup
+sol! {
+    #[sol(rpc)]
+    interface IIdentityRegistry {
+        function getAgentByOwner(address owner) external view returns (uint256);
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StartServiceRequest {
     pub service_id: String,
@@ -175,19 +183,12 @@ pub async fn start_service(
                 let provider = ProviderBuilder::new()
                     .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
 
-                let registry = Address::from_str(identity_registry)
+                let id_registry = Address::from_str(identity_registry)
                     .map_err(|e| format!("Invalid identity registry address: {}", e))?;
                 let wallet = Address::from_str(wallet_addr)
                     .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-                // Call getAgentByOwner on IdentityRegistry
-                sol! {
-                    interface IIdentityRegistry {
-                        function getAgentByOwner(address owner) external view returns (uint256);
-                    }
-                }
-
-                let id_contract = IIdentityRegistry::new(registry, &provider);
+                let id_contract = IIdentityRegistry::new(id_registry, &provider);
                 match id_contract.getAgentByOwner(wallet).call().await {
                     Ok(result) => {
                         let id = result._0.try_into().unwrap_or(0u64);
