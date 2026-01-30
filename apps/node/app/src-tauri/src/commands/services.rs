@@ -204,7 +204,7 @@ pub async fn start_service(
             // Check if we have an agent_id
             if let Some(agent_id) = agent_id {
                 // First check if the agent has enough stake
-                const MIN_STAKE_WEI: u128 = 10_000_000_000_000_000; // 0.01 ETH
+                const MIN_STAKE_WEI: u128 = 10_000_000_000_000_000; // 0.01 JEJU
 
                 if let Some(ref contract_client) = inner.contract_client {
                     let wallet = Address::from_str(wallet_addr)
@@ -217,11 +217,11 @@ pub async fn start_service(
                         .sum();
 
                     if total_staked < MIN_STAKE_WEI {
-                        let min_eth = MIN_STAKE_WEI as f64 / 1e18;
-                        let current_eth = total_staked as f64 / 1e18;
+                        let min_jeju = MIN_STAKE_WEI as f64 / 1e18;
+                        let current_jeju = total_staked as f64 / 1e18;
                         return Err(format!(
-                            "Insufficient stake to register compute provider. Minimum required: {} ETH, current stake: {} ETH. Please stake at least {} ETH first.",
-                            min_eth, current_eth, min_eth
+                            "Insufficient stake to register compute provider. Minimum required: {} JEJU, current stake: {} JEJU. Please stake at least {} JEJU first.",
+                            min_jeju, current_jeju, min_jeju
                         ));
                     }
 
