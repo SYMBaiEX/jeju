@@ -3,9 +3,31 @@
 use crate::hardware::HardwareDetector;
 use crate::services::{ServiceId, ServiceMetadata, ServiceState};
 use crate::state::AppState;
+use alloy::primitives::{Address, FixedBytes, U256};
+use alloy::providers::ProviderBuilder;
+use alloy::sol;
+use alloy::sol_types::SolCall;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 use tauri::State;
+
+// ComputeRegistry contract interface for on-chain registration
+sol! {
+    #[sol(rpc)]
+    interface IComputeRegistry {
+        function registerWithAgent(
+            string calldata name,
+            string calldata endpoint,
+            bytes32 attestationHash,
+            uint256 agentId
+        ) external payable;
+
+        function hasValidAgent(address provider) external view returns (bool);
+        function getAgentByProvider(address provider) external view returns (uint256);
+        function providerCount() external view returns (uint256);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StartServiceRequest {
@@ -136,6 +158,89 @@ pub async fn start_service(
     } else {
         (None, None)
     };
+
+    // For compute service, check and perform on-chain registration if needed
+    if service_id == ServiceId::Compute {
+        if let Some(ref wallet_addr) = wallet_address {
+            let registry_address = &inner.config.network.contracts.compute_registry;
+            let agent_id = inner.config.wallet.agent_id;
+            let rpc_url = &inner.config.network.rpc_url;
+
+            // Check if we have an agent_id configured
+            if let Some(agent_id) = agent_id {
+                tracing::info!(
+                    "Checking on-chain registration for wallet {} with agent {} on registry {}",
+                    wallet_addr,
+                    agent_id,
+                    registry_address
+                );
+
+                // Check if already registered
+                let provider = ProviderBuilder::new()
+                    .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
+
+                let registry = Address::from_str(registry_address)
+                    .map_err(|e| format!("Invalid registry address: {}", e))?;
+                let wallet = Address::from_str(wallet_addr)
+                    .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+                let contract = IComputeRegistry::new(registry, &provider);
+
+                let is_registered = match contract.hasValidAgent(wallet).call().await {
+                    Ok(result) => result._0,
+                    Err(e) => {
+                        tracing::warn!("Failed to check on-chain registration: {}", e);
+                        false
+                    }
+                };
+
+                if is_registered {
+                    tracing::info!("Provider already registered on-chain with valid agent");
+                } else {
+                    tracing::info!("Provider not registered on-chain, initiating registration...");
+
+                    // Build node name and endpoint
+                    let node_name = format!("node-{}", &wallet_addr[2..10]);
+                    let ollama_endpoint = std::env::var("OLLAMA_HOST")
+                        .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+
+                    // Encode the registerWithAgent call
+                    let call = IComputeRegistry::registerWithAgentCall {
+                        name: node_name.clone(),
+                        endpoint: ollama_endpoint.clone(),
+                        attestationHash: FixedBytes::ZERO, // No TEE attestation for now
+                        agentId: U256::from(agent_id),
+                    };
+                    let calldata = hex::encode(call.abi_encode());
+
+                    // Send transaction using wallet_manager
+                    if let Some(ref wallet_manager) = inner.wallet_manager {
+                        match wallet_manager
+                            .send_transaction(registry_address, "0", Some(&calldata))
+                            .await
+                        {
+                            Ok(result) => {
+                                tracing::info!(
+                                    "On-chain registration transaction sent: {} (name={}, agent_id={})",
+                                    result.hash,
+                                    node_name,
+                                    agent_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to send on-chain registration: {}", e);
+                                // Don't fail startup, just log - DWS registration will still work
+                            }
+                        }
+                    } else {
+                        tracing::warn!("No wallet manager available for on-chain registration");
+                    }
+                }
+            } else {
+                tracing::warn!("No agent_id configured, skipping on-chain registration");
+            }
+        }
+    }
 
     // Get or create service config
     let config = inner
