@@ -647,6 +647,11 @@ Keep it concise (2-4 sentences) but impactful.`
     this.initialized = false
   }
 
+  unregisterDAO(daoId: string): void {
+    this.daoRuntimes.delete(daoId)
+    this.directorPersonas.delete(daoId)
+  }
+
   isInitialized(): boolean {
     return this.initialized
   }
