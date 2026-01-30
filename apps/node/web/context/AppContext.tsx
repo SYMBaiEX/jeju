@@ -300,10 +300,15 @@ export function AppProvider({ children }: AppProviderProps) {
         custom_settings: null,
       })
 
-      await withOperationLock(`Starting ${serviceId}`, async () => {
-        await invoke('start_service', { request })
-        await fetchServices()
-      })
+      try {
+        await withOperationLock(`Starting ${serviceId}`, async () => {
+          await invoke('start_service', { request })
+          await fetchServices()
+        })
+      } catch (err: any) {
+        console.error('[JejuNode] startService error:', err)
+        dispatch({ type: 'SET_ERROR', payload: err?.message || String(err) })
+      }
     },
     [withOperationLock, fetchServices],
   )
