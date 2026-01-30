@@ -29,13 +29,6 @@ sol! {
     }
 }
 
-// IdentityRegistry interface for agent lookup
-sol! {
-    #[sol(rpc)]
-    interface IIdentityRegistry {
-        function getAgentByOwner(address owner) external view returns (uint256);
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StartServiceRequest {
@@ -172,42 +165,39 @@ pub async fn start_service(
         if let Some(ref wallet_addr) = wallet_address {
             // Clone to avoid borrow conflicts when we need to mutate inner later
             let registry_address = inner.config.network.contracts.compute_registry.clone();
-            let identity_registry = inner.config.network.contracts.identity_registry.clone();
             let rpc_url = inner.config.network.rpc_url.clone();
 
-            // Try to get agent_id from config, or look it up from IdentityRegistry
+            // Try to get agent_id from config, or look it up using contract_client
             let agent_id = if let Some(id) = inner.config.wallet.agent_id {
                 Some(id)
             } else {
-                // Look up agent_id from IdentityRegistry by owner address
+                // Look up agent_id from IdentityRegistry using contract_client
                 tracing::info!("No agent_id in config, looking up from IdentityRegistry...");
-                let provider = ProviderBuilder::new()
-                    .on_http(rpc_url.parse().map_err(|e| format!("Invalid RPC URL: {}", e))?);
 
-                let id_registry = Address::from_str(&identity_registry)
-                    .map_err(|e| format!("Invalid identity registry address: {}", e))?;
-                let wallet = Address::from_str(wallet_addr)
-                    .map_err(|e| format!("Invalid wallet address: {}", e))?;
+                if let Some(ref contract_client) = inner.contract_client {
+                    let wallet = Address::from_str(wallet_addr)
+                        .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-                let id_contract = IIdentityRegistry::new(id_registry, &provider);
-                match id_contract.getAgentByOwner(wallet).call().await {
-                    Ok(result) => {
-                        let id = result._0.try_into().unwrap_or(0u64);
-                        if id > 0 {
+                    match contract_client.get_agent_by_owner(wallet).await {
+                        Ok(Some(id)) => {
                             tracing::info!("Found agent_id {} for wallet {}", id, wallet_addr);
                             // Save to config for future use
                             inner.config.wallet.agent_id = Some(id);
                             let _ = inner.config.save(); // Best effort save
                             Some(id)
-                        } else {
+                        }
+                        Ok(None) => {
                             tracing::warn!("No agent found for wallet {}", wallet_addr);
                             None
                         }
+                        Err(e) => {
+                            tracing::warn!("Failed to look up agent_id: {}", e);
+                            None
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to look up agent_id: {}", e);
-                        None
-                    }
+                } else {
+                    tracing::warn!("Contract client not initialized, cannot look up agent_id");
+                    None
                 }
             };
 
