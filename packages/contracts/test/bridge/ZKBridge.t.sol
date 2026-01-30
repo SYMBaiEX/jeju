@@ -125,6 +125,16 @@ contract MockBoard is IBoardGovernance {
     function markExecuting(bytes32) external {}
     function markCompleted(bytes32) external {}
     function markFailed(bytes32, string calldata) external {}
+
+    // New interface functions (stubs for mock)
+    function submitProposal(bytes32, uint8, bytes32, address, bytes calldata, uint256) external returns (bytes32) {
+        return bytes32(0);
+    }
+    function updateProposalStatus(bytes32, ProposalStatus) external {}
+    function setDirectorApproval(bytes32, bool, bytes32) external {}
+    function getProposalsByDAO(bytes32) external pure returns (bytes32[] memory) {
+        return new bytes32[](0);
+    }
 }
 
 // Mock ZK verifier
