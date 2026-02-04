@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {BasePaymaster} from "account-abstraction/core/BasePaymaster.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
-import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
+import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
@@ -132,7 +132,11 @@ contract LiquidityPaymaster is BasePaymaster {
         return tokenAmount;
     }
 
-    function _validatePaymasterUserOp(UserOperation calldata userOp, bytes32, uint256 maxCost)
+    function _validatePaymasterUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32,
+        uint256 maxCost
+    )
         internal
         view
         override
@@ -151,7 +155,13 @@ contract LiquidityPaymaster is BasePaymaster {
         validationData = 0;
     }
 
-    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost) internal override {
+    function _postOp(
+        PostOpMode,
+        bytes calldata context,
+        uint256 actualGasCost,
+        uint256 actualUserOpFeePerGas
+    ) internal override {
+        actualUserOpFeePerGas;
         (address sender,, uint256 maxTokenAmount) = abi.decode(context, (address, uint256, uint256));
 
         uint256 actualTokenCost = getTokenAmountForEth(actualGasCost);

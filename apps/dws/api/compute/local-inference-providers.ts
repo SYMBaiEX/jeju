@@ -14,7 +14,7 @@ import {
 const LOCAL_PROVIDER_PREFIX = 'local-provider:'
 const HEARTBEAT_INTERVAL_MS = 30000
 const SERVICE_ID = 'dws'
-const SQLIT_DATABASE_ID = process.env.SQLIT_DATABASE_ID ?? 'dws'
+const SQLIT_DATABASE_ID = process.env.SQLIT_DATABASE_ID ?? 'dws-core'
 
 const OPENAI_COMPATIBLE_PROVIDERS = [
   'openai',
